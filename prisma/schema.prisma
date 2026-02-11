@@ -20,6 +20,13 @@ enum UserRole {
 // Types d'activités - gérés dynamiquement via la table ActivityTypeConfig
 // (Ancien enum supprimé au profit d'un champ String + table de référence)
 
+// Statut de demande de vérification
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // Statut d'activité
 enum ActivityStatus {
   DRAFT
@@ -95,10 +102,15 @@ model Establishment {
   // Code promo utilisé
   usedPromoCodeId        String?
 
+  // Vérification établissement
+  verifiedAt             DateTime?
+  verifiedByAdminId      String?
+
   // Relations
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   activity   Activity?   // Relation 1:1 - un établissement = une activité
   usedPromoCode PromoCode? @relation(fields: [usedPromoCodeId], references: [id])
+  verificationRequests VerificationRequest[]
 }
 
 // Modèle Activité (unique par établissement)
@@ -278,4 +290,36 @@ model VideoCategoryConfig {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Demande de vérification d'un établissement
+model VerificationRequest {
+  id              String             @id @default(cuid())
+  establishmentId String
+  status          VerificationStatus @default(PENDING)
+  message         String?            @db.Text  // Message optionnel de l'établissement
+  adminNote       String?            @db.Text  // Note interne de l'admin (raison refus, etc.)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  // Relations
+  establishment Establishment          @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  attachments   VerificationAttachment[]
+
+  @@index([establishmentId])
+  @@index([status])
+}
+
+// Pièce jointe d'une demande de vérification (KBIS, etc.)
+model VerificationAttachment {
+  id                    String   @id @default(cuid())
+  verificationRequestId String
+  fileName              String   // Nom original du fichier
+  storagePath           String   // Chemin privé sur le serveur (hors /public)
+  fileSize              Int      // Taille en bytes
+  mimeType              String   // Type MIME (application/pdf, image/jpeg, etc.)
+  createdAt             DateTime @default(now())
+
+  // Relations
+  verificationRequest VerificationRequest @relation(fields: [verificationRequestId], references: [id], onDelete: Cascade)
 }

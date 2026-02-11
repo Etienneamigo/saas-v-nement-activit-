@@ -56,8 +56,8 @@ export function EstablishmentActions({ establishment }: EstablishmentActionsProp
     } else {
       toast.success(
         result.activity?.adminPick
-          ? "Activité validée par Wadelo"
-          : "Validation Wadelo retirée"
+          ? "Coup de coeur Wadelo ajouté"
+          : "Coup de coeur Wadelo retiré"
       )
       router.refresh()
     }
@@ -82,8 +82,8 @@ export function EstablishmentActions({ establishment }: EstablishmentActionsProp
             <DropdownMenuItem onClick={handleToggleAdminPick}>
               <Award className="mr-2 h-4 w-4" />
               {establishment.activity.adminPick
-                ? "Retirer validation Wadelo"
-                : "Valider par Wadelo"}
+                ? "Retirer coup de coeur"
+                : "Coup de coeur Wadelo"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

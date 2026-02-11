@@ -4,7 +4,7 @@ import { SessionProvider } from "@/components/providers/SessionProvider"
 import { Header } from "@/components/layout/Header"
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav"
 import Link from "next/link"
-import { Users, Building2, Tag, LayoutDashboard, Settings, Shapes, FileText } from "lucide-react"
+import { Users, Building2, Tag, LayoutDashboard, Settings, Shapes, FileText, ShieldCheck } from "lucide-react"
 
 export default async function AdminLayout({
   children,
@@ -63,6 +63,13 @@ export default async function AdminLayout({
               >
                 <Tag className="h-5 w-5" />
                 Codes promo
+              </Link>
+              <Link
+                href="/admin/verifications"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700"
+              >
+                <ShieldCheck className="h-5 w-5" />
+                Verifications
               </Link>
               <Link
                 href="/admin/pages-legales"

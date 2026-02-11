@@ -60,6 +60,9 @@ export default async function EstablishmentsPage() {
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{establishment.name}</p>
                     {getSubscriptionBadge(establishment.subscriptionStatus)}
+                    {establishment.verifiedAt && (
+                      <Badge className="bg-blue-500">Verifie</Badge>
+                    )}
                     {!establishment.user.isActive && (
                       <Badge variant="destructive">Compte desactive</Badge>
                     )}
@@ -76,7 +79,7 @@ export default async function EstablishmentsPage() {
                         {establishment.activity.status === "PUBLISHED" ? "Publié" : "Brouillon"}
                       </Badge>
                       {establishment.activity.adminPick && (
-                        <Badge className="ml-2 text-xs bg-emerald-500">Validé Wadelo</Badge>
+                        <Badge className="ml-2 text-xs bg-emerald-500">Coup de coeur</Badge>
                       )}
                       <span className="text-muted-foreground ml-4">
                         {establishment.activity.viewCount} vues, {establishment.activity._count.favorites} favoris

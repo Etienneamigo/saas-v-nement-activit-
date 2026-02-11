@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ACTIVITY_TYPES, ActivityTypeKey } from "@/lib/constants"
-import { Plus, Eye, Heart, Edit, MapPin, ExternalLink, Settings, CreditCard, AlertCircle } from "lucide-react"
+import { Plus, Eye, Heart, Edit, MapPin, ExternalLink, Settings, CreditCard, AlertCircle, BadgeCheck, ShieldCheck } from "lucide-react"
 import { ActivityActions } from "./ActivityActions"
 import { AnalyticsCard } from "./AnalyticsCard"
 import { getSubscriptionDisplayState, isSubscriptionActive } from "@/lib/subscription"
@@ -311,6 +311,36 @@ export default async function DashboardPage() {
               </Link>
             </Card>
           </div>
+
+          {/* Verification Status */}
+          <Card className={
+            establishment?.verifiedAt
+              ? "border-blue-200 bg-blue-50"
+              : "hover:bg-gray-50 transition-colors"
+          }>
+            <Link href="/etablissement/verification">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  {establishment?.verifiedAt ? (
+                    <>
+                      <BadgeCheck className="h-5 w-5 text-blue-600" />
+                      Etablissement verifie
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-5 w-5" />
+                      Verification
+                    </>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {establishment?.verifiedAt
+                    ? `Verifie le ${new Date(establishment.verifiedAt).toLocaleDateString("fr-FR")}`
+                    : "Faites verifier votre etablissement pour obtenir le badge de confiance"}
+                </CardDescription>
+              </CardHeader>
+            </Link>
+          </Card>
 
           {/* Detailed Analytics */}
           <AnalyticsCard activityId={activity.id} />

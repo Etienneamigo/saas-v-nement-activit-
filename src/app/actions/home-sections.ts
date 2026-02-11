@@ -161,7 +161,7 @@ export async function getEveningActivities(
 }
 
 /**
- * Section C: "Validé par Wadelo"
+ * Section C: "Coup de coeur Wadelo"
  * Activities marked as adminPick by admins.
  */
 export async function getAdminPickActivities(

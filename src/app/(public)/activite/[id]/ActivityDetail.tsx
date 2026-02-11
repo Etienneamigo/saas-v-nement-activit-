@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   Play,
   ChevronDown,
+  BadgeCheck,
 } from "lucide-react"
 import type { Activity, Media, Establishment, Event } from "@prisma/client"
 import { EventsCarousel } from "./EventsCarousel"
@@ -329,7 +330,15 @@ export function ActivityDetail({
       {/* Établissement */}
       <div className="mb-10 p-5 bg-gray-50 rounded-xl">
         <h2 className="text-lg font-semibold text-gray-900 mb-3">Établissement</h2>
-        <p className="font-medium text-gray-900">{activity.establishment.name}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-gray-900">{activity.establishment.name}</p>
+          {activity.establishment.verifiedAt && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+              <BadgeCheck className="h-3.5 w-3.5" />
+              Verifie
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

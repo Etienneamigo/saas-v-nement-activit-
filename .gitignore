@@ -39,6 +39,9 @@ yarn-error.log*
 public/uploads/*
 !public/uploads/.gitkeep
 
+# private verification uploads
+data/verification-uploads/
+
 # vercel
 .vercel
 

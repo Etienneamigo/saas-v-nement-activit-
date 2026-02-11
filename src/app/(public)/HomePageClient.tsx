@@ -162,13 +162,13 @@ export function HomePageClient({
         emptyMessage="Pas d'activités de soirée trouvées"
       />
 
-      {/* Section C: Validé par Wadelo */}
+      {/* Section C: Coup de coeur Wadelo */}
       <HomeSection
-        title="Validé par Wadelo"
+        title="Coup de coeur Wadelo"
         icon={<Award className="h-5 w-5 text-emerald-500" />}
         activities={adminPickActivities}
         loading={!sectionsLoaded}
-        emptyMessage="Bientôt des sélections Wadelo"
+        emptyMessage="Bientôt des coups de coeur Wadelo"
       />
 
       {/* Activity Types Section — existing categories */}
