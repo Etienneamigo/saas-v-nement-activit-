@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"
+
 import { LegalPageContent } from "@/components/legal/LegalPageContent"
 import type { Metadata } from "next"
 
