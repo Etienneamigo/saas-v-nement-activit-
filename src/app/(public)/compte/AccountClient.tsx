@@ -11,6 +11,12 @@ import {
   CreditCard,
   Shield,
   User,
+  FileText,
+  ShieldCheck,
+  Cookie,
+  ScrollText,
+  Receipt,
+  Mail,
 } from "lucide-react"
 
 interface AccountClientProps {
@@ -82,6 +88,57 @@ export function AccountClient({ user }: AccountClientProps) {
             <span className="text-sm font-medium">Administration</span>
           </Link>
         )}
+      </div>
+
+      {/* Legal pages */}
+      <div className="mb-8">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide px-4 mb-2">
+          Informations legales
+        </p>
+        <div className="space-y-1">
+          <Link
+            href="/mentions-legales"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          >
+            <FileText className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium">Mentions legales</span>
+          </Link>
+          <Link
+            href="/politique-confidentialite"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          >
+            <ShieldCheck className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium">Politique de confidentialite</span>
+          </Link>
+          <Link
+            href="/politique-cookies"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          >
+            <Cookie className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium">Politique cookies</span>
+          </Link>
+          <Link
+            href="/cgu"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          >
+            <ScrollText className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium">CGU</span>
+          </Link>
+          <Link
+            href="/cgv"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          >
+            <Receipt className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium">CGV</span>
+          </Link>
+          <Link
+            href="/contact"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
+          >
+            <Mail className="h-5 w-5 text-gray-400" />
+            <span className="text-sm font-medium">Contact</span>
+          </Link>
+        </div>
       </div>
 
       {/* Logout */}

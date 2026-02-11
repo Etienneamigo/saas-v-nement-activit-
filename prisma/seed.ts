@@ -16,6 +16,7 @@ async function main() {
   await prisma.promoCode.deleteMany()
   await prisma.activityTypeConfig.deleteMany()
   await prisma.videoCategoryConfig.deleteMany()
+  await prisma.staticPage.deleteMany()
 
   // Seed activity types
   const activityTypes = [
@@ -58,6 +59,23 @@ async function main() {
     await prisma.videoCategoryConfig.create({ data: vc })
   }
   console.log("🎬 Seeded", videoCategories.length, "video categories")
+
+  // Seed static/legal pages
+  const staticPages = [
+    { slug: "mentions-legales", title: "Mentions légales" },
+    { slug: "politique-confidentialite", title: "Politique de confidentialité" },
+    { slug: "politique-cookies", title: "Politique cookies" },
+    { slug: "cgu", title: "Conditions générales d'utilisation" },
+    { slug: "cgv", title: "Conditions générales de vente" },
+    { slug: "contact", title: "Contact" },
+  ]
+
+  for (const sp of staticPages) {
+    await prisma.staticPage.create({
+      data: { slug: sp.slug, title: sp.title, content: "" },
+    })
+  }
+  console.log("📄 Seeded", staticPages.length, "static pages")
 
   console.log("🧹 Cleaned existing data")
 

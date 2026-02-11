@@ -259,6 +259,16 @@ model ActivityTypeConfig {
   updatedAt DateTime @updatedAt
 }
 
+// Pages statiques / légales (géré par l'admin)
+model StaticPage {
+  id        String   @id @default(cuid())
+  slug      String   @unique  // Ex: "mentions-legales", "cgu", "cgv", etc.
+  title     String             // Titre affiché
+  content   String   @default("") @db.Text  // Contenu en markdown
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Configuration des catégories de vidéos (géré par l'admin)
 model VideoCategoryConfig {
   id        String   @id @default(cuid())
