@@ -32,7 +32,7 @@ export function middleware(request: NextRequest) {
     "font-src 'self' data: https://fonts.gstatic.com",
 
     // Connect - API calls (self + Stripe + Cloudflare)
-    "connect-src 'self' https://api.stripe.com https://challenges.cloudflare.com wss: https://upload.cloudflarestream.com https://upload.videodelivery.net https://*.cloudflarestream.com https://*.videodelivery.net https://upload.imagedelivery.net",
+    "connect-src 'self' https://api.stripe.com https://challenges.cloudflare.com wss: https://upload.cloudflarestream.com https://upload.videodelivery.net https://*.cloudflarestream.com https://*.videodelivery.net https://upload.imagedelivery.net https://nominatim.openstreetmap.org",
 
     // Frames - Stripe 3DS, Cloudflare Turnstile
     "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
