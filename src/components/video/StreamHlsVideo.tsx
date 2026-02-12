@@ -46,6 +46,15 @@ export const StreamHlsVideo = forwardRef<HTMLVideoElement, StreamHlsVideoProps>(
     // Expose the video element via ref
     useImperativeHandle(ref, () => videoRef.current!, [])
 
+    // React doesn't reliably update the `muted` DOM property via JSX attribute.
+    // Synchronize imperatively whenever the prop changes.
+    useEffect(() => {
+      const video = videoRef.current
+      if (video) {
+        video.muted = muted
+      }
+    }, [muted])
+
     const isHls = src.includes(".m3u8") || src.includes("cloudflarestream.com")
 
     useEffect(() => {
