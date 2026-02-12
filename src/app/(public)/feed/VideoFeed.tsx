@@ -110,8 +110,12 @@ export function VideoFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userLocation, radius])
 
-  // Auto-play current video and pause others
+  // Auto-play current video and pause others.
+  // Include videos.length so this also fires when the first batch of videos arrives
+  // (currentIndex stays 0 on initial load, so without this dependency the effect
+  // would not re-run and the first video would never autoplay).
   useEffect(() => {
+    if (videos.length === 0) return
     videoRefs.current.forEach((video, index) => {
       if (index === currentIndex) {
         video.play().catch(() => {})
@@ -120,7 +124,8 @@ export function VideoFeed() {
         video.currentTime = 0
       }
     })
-  }, [currentIndex])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, videos.length])
 
   // Load more when approaching end
   useEffect(() => {
@@ -185,7 +190,7 @@ export function VideoFeed() {
         e.preventDefault()
         goToVideo(currentIndex - 1)
       } else if (e.key === "m") {
-        setIsMuted((prev) => !prev)
+        toggleMute()
       }
     }
 
@@ -194,12 +199,22 @@ export function VideoFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex])
 
-  // Apply mute state to all videos
+  // Apply mute state to all videos (fallback for newly added video elements)
   useEffect(() => {
     videoRefs.current.forEach((video) => {
       video.muted = isMuted
     })
-  }, [isMuted])
+  }, [isMuted, videos.length])
+
+  // Toggle mute with immediate imperative update (preserves user gesture context
+  // required by browser autoplay policies for audio playback)
+  function toggleMute() {
+    const newMuted = !isMuted
+    setIsMuted(newMuted)
+    videoRefs.current.forEach((video) => {
+      video.muted = newMuted
+    })
+  }
 
   if (isLoading && videos.length === 0) {
     return (
@@ -277,7 +292,7 @@ export function VideoFeed() {
             variant="secondary"
             size="icon"
             className="bg-black/50 text-white hover:bg-black/70 border-0 h-8 w-8"
-            onClick={() => setIsMuted(!isMuted)}
+            onClick={toggleMute}
           >
             {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>

@@ -87,35 +87,48 @@ export function SearchResults({ params }: SearchResultsProps) {
   const [priceMax, setPriceMax] = useState(params.priceMax || "")
   const [sortBy, setSortBy] = useState(params.sortBy || "distance")
 
+  // Sync city filter state when URL params change (e.g. after geolocation clears city)
+  useEffect(() => {
+    setCity(params.city || "")
+  }, [params.city])
+
   const fetchActivities = useCallback(async () => {
     setIsLoading(true)
 
-    let lat = params.lat ? parseFloat(params.lat) : undefined
-    let lng = params.lng ? parseFloat(params.lng) : undefined
+    let lat: number | undefined
+    let lng: number | undefined
 
-    // Use persisted geolocation if no URL coordinates
-    if (!lat && !lng && !params.city && geoLocation) {
-      lat = geoLocation.lat
-      lng = geoLocation.lng
-    }
-
-    // If city is provided but no coordinates, geocode the city
-    if (!lat && !lng && params.city) {
+    // Priority for coordinate source:
+    // 1. If city/CP is used, geocode it for consistent distance calculation
+    // 2. If lat/lng from URL (geo mode), use those
+    // 3. Fall back to persisted geolocation from context
+    if (params.city) {
       const coords = await geocodeCity(params.city)
       if (coords) {
         lat = coords.lat
         lng = coords.lng
       }
+    } else if (params.lat && params.lng) {
+      lat = parseFloat(params.lat)
+      lng = parseFloat(params.lng)
+    } else if (geoLocation) {
+      lat = geoLocation.lat
+      lng = geoLocation.lng
     }
 
     if (lat && lng) {
       setCenter({ lat, lng })
     }
 
+    // When we have coordinates from city geocoding, don't also filter by city name
+    // (the radius filter is sufficient and avoids excluding nearby activities
+    // in neighboring communes)
+    const cityFilter = (lat !== undefined && lng !== undefined) ? undefined : params.city
+
     const result = await searchActivities({
       lat,
       lng,
-      city: params.city,
+      city: cityFilter,
       type: params.type,
       radius: params.radius ? parseInt(params.radius) : 10,
       minPeople: params.minPeople ? parseInt(params.minPeople) : undefined,
@@ -145,9 +158,14 @@ export function SearchResults({ params }: SearchResultsProps) {
   function handleSearch() {
     const searchParams = new URLSearchParams()
 
-    if (params.lat) searchParams.set("lat", params.lat)
-    if (params.lng) searchParams.set("lng", params.lng)
-    if (city) searchParams.set("city", city)
+    // Don't mix geo coords with city filter — use one or the other
+    if (city) {
+      searchParams.set("city", city)
+    } else if (params.lat && params.lng) {
+      searchParams.set("lat", params.lat)
+      searchParams.set("lng", params.lng)
+    }
+
     if (type && type !== "all") searchParams.set("type", type)
     if (radius) searchParams.set("radius", radius)
     if (minPeople) searchParams.set("minPeople", minPeople)

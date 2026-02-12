@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useRef } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -44,6 +44,29 @@ export function SearchHero({
 
   const [city, setCity] = useState(initialCity)
   const [type, setType] = useState(initialType)
+  const pathname = usePathname()
+  const prevLocationRef = useRef(location)
+
+  // When geolocation succeeds, clear city and auto-trigger search on search page
+  useEffect(() => {
+    const wasNull = prevLocationRef.current === null
+    prevLocationRef.current = location
+
+    if (location && wasNull) {
+      // Geolocation just succeeded — clear city/postalCode
+      setCity("")
+
+      // If we're on the search page, auto-navigate to refresh results with geo coords only
+      if (pathname === "/recherche") {
+        const params = new URLSearchParams()
+        params.set("lat", location.lat.toString())
+        params.set("lng", location.lng.toString())
+        if (type && type !== "all") params.set("type", type)
+        params.set("radius", "20")
+        router.push(`/recherche?${params.toString()}`)
+      }
+    }
+  }, [location, pathname, type, router])
 
   const dropdownOptions = activityTypeOptions && activityTypeOptions.length > 0
     ? activityTypeOptions.map((o) => ({ value: o.value, label: o.label }))
