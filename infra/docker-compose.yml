@@ -50,6 +50,7 @@ services:
       - "3000"
     volumes:
       - activites_uploads:/app/public/uploads
+      - activites_data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -59,6 +60,8 @@ volumes:
     name: infra_activites_pg
   activites_uploads:
     name: infra_activites_uploads
+  activites_data:
+    name: infra_activites_data
   caddy_data:
     name: infra_caddy_data
   caddy_config:
