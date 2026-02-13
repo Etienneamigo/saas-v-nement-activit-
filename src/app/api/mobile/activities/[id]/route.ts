@@ -28,6 +28,7 @@ export async function GET(
           city: true,
           zipCode: true,
           country: true,
+          verifiedAt: true,
         },
       },
       medias: { orderBy: { createdAt: "asc" } },
