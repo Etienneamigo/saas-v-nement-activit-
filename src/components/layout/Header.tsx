@@ -58,6 +58,9 @@ export function Header() {
               <Link href="/etablissement/dashboard" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                 Mon établissement
               </Link>
+              <Link href="/etablissement/reservations" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                Réservations
+              </Link>
               <Link href="/etablissement/abonnement" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                 Abonnement
               </Link>
