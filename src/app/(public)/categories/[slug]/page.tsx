@@ -1,6 +1,8 @@
 import { Suspense } from "react"
 import { getCategoryLabel } from "@/lib/constants"
 import { CategoryResults } from "./CategoryResults"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/db"
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>
@@ -25,10 +27,29 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   const sp = await searchParams
   const label = getCategoryLabel(slug)
 
+  const session = await auth()
+  const isAuthenticated = !!session?.user?.id
+
+  // Précharger les favoris de l'utilisateur si connecté
+  let initialFavoritedIds: string[] = []
+  if (session?.user?.id) {
+    const favorites = await prisma.favorite.findMany({
+      where: { userId: session.user.id },
+      select: { activityId: true },
+    })
+    initialFavoritedIds = favorites.map((f) => f.activityId)
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <Suspense fallback={<CategorySkeleton />}>
-        <CategoryResults slug={slug} label={label} searchParams={sp} />
+        <CategoryResults
+          slug={slug}
+          label={label}
+          searchParams={sp}
+          isAuthenticated={isAuthenticated}
+          initialFavoritedIds={initialFavoritedIds}
+        />
       </Suspense>
     </div>
   )

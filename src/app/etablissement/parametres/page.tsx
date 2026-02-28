@@ -20,6 +20,11 @@ export default async function SettingsPage() {
       address: true,
       city: true,
       zipCode: true,
+      accessWheelchair: true,
+      accessToilets: true,
+      accessParking: true,
+      accessElevator: true,
+      accessLevelEntry: true,
     },
   })
 

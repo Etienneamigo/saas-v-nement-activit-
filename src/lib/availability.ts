@@ -65,11 +65,11 @@ export async function getAvailableSlots(
   let openRanges: TimeRange[]
 
   if (override?.customOpenRanges) {
-    openRanges = override.customOpenRanges as unknown as TimeRange[]
+    openRanges = normalizeOpenRanges(override.customOpenRanges)
   } else {
     const schedule = settings.weeklySchedule.find((s) => s.dayOfWeek === dayOfWeek)
     if (!schedule) return [] // Pas d'horaires ce jour
-    openRanges = schedule.openRanges as unknown as TimeRange[]
+    openRanges = normalizeOpenRanges(schedule.openRanges)
   }
 
   const capacityPerSlot = override?.customCapacity ?? settings.capacityPerSlot
@@ -116,6 +116,41 @@ export async function getAvailableSlots(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Normalise openRanges provenant du JSON Prisma.
+ * Protège contre les anciennes données mal stockées (objets Date ou ISO strings
+ * au lieu de "HH:mm").
+ */
+function normalizeOpenRanges(raw: unknown): TimeRange[] {
+  if (!Array.isArray(raw)) return []
+
+  return raw
+    .map((item: unknown) => {
+      if (!item || typeof item !== "object") return null
+      const obj = item as Record<string, unknown>
+      const start = normalizeTimeValue(obj.start)
+      const end = normalizeTimeValue(obj.end)
+      if (!start || !end) return null
+      return { start, end }
+    })
+    .filter((r): r is TimeRange => r !== null)
+}
+
+function normalizeTimeValue(value: unknown): string | null {
+  if (typeof value === "string") {
+    // Déjà au format "HH:mm"
+    if (/^\d{2}:\d{2}$/.test(value)) return value
+    // ISO string (ex: "2024-01-15T10:00:00.000Z") → extraire HH:mm
+    const match = value.match(/T(\d{2}:\d{2})/)
+    if (match) return match[1]
+    return null
+  }
+  if (value instanceof Date) {
+    return value.toISOString().slice(11, 16)
+  }
+  return null
+}
 
 function generateSlots(
   date: Date,
@@ -187,9 +222,17 @@ function parseLocalDateTime(dateStr: string, timeStr: string, timezone: string):
   return new Date(candidate.getTime() - offset * 60 * 1000)
 }
 
+/**
+ * Retourne l'offset en minutes de la timezone par rapport à UTC.
+ * Positif pour UTC+ (ex: Europe/Paris hiver = +60, été = +120).
+ *
+ * Correction du bug original : l'ancienne version retournait -diff, ce qui
+ * inversait l'offset et décalait les créneaux dans la mauvaise direction.
+ */
 function getTzOffsetMinutes(date: Date, timezone: string): number {
   const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" })
   const tzStr = date.toLocaleString("en-US", { timeZone: timezone })
+  // diff > 0 si la timezone est en avance sur UTC (UTC+)
   const diff = (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
-  return -diff
+  return diff  // Corrigé : était -diff (sens inversé)
 }

@@ -1,7 +1,7 @@
 /**
  * Tests for the availability service (pure logic, no DB)
  */
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect } from "vitest"
 
 // ─── Helpers extracted from availability.ts (pure functions) ────────────────
 
@@ -30,11 +30,16 @@ function getDayOfWeekInTz(date: Date, timezone: string): number {
   return map[weekday ?? "Mon"] ?? 1
 }
 
+/**
+ * Retourne l'offset en minutes de la timezone par rapport à UTC.
+ * Positif pour UTC+ (ex: Europe/Paris hiver = +60, été = +120).
+ * Corrigé : la version originale retournait -diff (sens inversé).
+ */
 function getTzOffsetMinutes(date: Date, timezone: string): number {
   const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" })
   const tzStr = date.toLocaleString("en-US", { timeZone: timezone })
   const diff = (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
-  return -diff
+  return diff  // Corrigé : était -diff
 }
 
 function parseLocalDateTime(dateStr: string, timeStr: string, timezone: string): Date {
@@ -49,6 +54,37 @@ interface TimeRange {
   start: string
   end: string
 }
+
+// ─── normalizeOpenRanges (copié depuis availability.ts) ──────────────────────
+
+function normalizeTimeValue(value: unknown): string | null {
+  if (typeof value === "string") {
+    if (/^\d{2}:\d{2}$/.test(value)) return value
+    const match = value.match(/T(\d{2}:\d{2})/)
+    if (match) return match[1]
+    return null
+  }
+  if (value instanceof Date) {
+    return value.toISOString().slice(11, 16)
+  }
+  return null
+}
+
+function normalizeOpenRanges(raw: unknown): TimeRange[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item: unknown) => {
+      if (!item || typeof item !== "object") return null
+      const obj = item as Record<string, unknown>
+      const start = normalizeTimeValue(obj.start)
+      const end = normalizeTimeValue(obj.end)
+      if (!start || !end) return null
+      return { start, end }
+    })
+    .filter((r): r is TimeRange => r !== null)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function generateSlots(
   date: Date,
@@ -78,7 +114,6 @@ function generateSlots(
 
 describe("formatDateLocal", () => {
   it("returns YYYY-MM-DD format in Europe/Paris", () => {
-    // 2026-03-15 UTC
     const d = new Date("2026-03-15T10:00:00Z")
     const result = formatDateLocal(d, "Europe/Paris")
     expect(result).toBe("2026-03-15")
@@ -105,6 +140,58 @@ describe("getDayOfWeekInTz", () => {
   })
 })
 
+describe("getTzOffsetMinutes (corrigé)", () => {
+  it("retourne +60 pour Europe/Paris en hiver (UTC+1)", () => {
+    // 2026-01-15 = hiver → Paris est UTC+1
+    const d = new Date("2026-01-15T10:00:00Z")
+    const offset = getTzOffsetMinutes(d, "Europe/Paris")
+    expect(offset).toBe(60)
+  })
+
+  it("retourne +120 pour Europe/Paris en été (UTC+2)", () => {
+    // 2026-07-15 = été → Paris est UTC+2
+    const d = new Date("2026-07-15T10:00:00Z")
+    const offset = getTzOffsetMinutes(d, "Europe/Paris")
+    expect(offset).toBe(120)
+  })
+
+  it("retourne 0 pour UTC", () => {
+    const d = new Date("2026-03-15T10:00:00Z")
+    const offset = getTzOffsetMinutes(d, "UTC")
+    expect(offset).toBe(0)
+  })
+})
+
+describe("parseLocalDateTime (correctness timezone)", () => {
+  it("10:00 Europe/Paris hiver → 09:00 UTC", () => {
+    // Hiver : Paris est UTC+1, donc 10:00 Paris = 09:00 UTC
+    const result = parseLocalDateTime("2026-01-15", "10:00", "Europe/Paris")
+    const utcHour = result.getUTCHours()
+    const utcMinute = result.getUTCMinutes()
+    expect(utcHour).toBe(9)
+    expect(utcMinute).toBe(0)
+  })
+
+  it("18:00 Europe/Paris hiver → 17:00 UTC", () => {
+    const result = parseLocalDateTime("2026-01-15", "18:00", "Europe/Paris")
+    expect(result.getUTCHours()).toBe(17)
+    expect(result.getUTCMinutes()).toBe(0)
+  })
+
+  it("10:00 Europe/Paris été → 08:00 UTC", () => {
+    // Été : Paris est UTC+2, donc 10:00 Paris = 08:00 UTC
+    const result = parseLocalDateTime("2026-07-15", "10:00", "Europe/Paris")
+    expect(result.getUTCHours()).toBe(8)
+    expect(result.getUTCMinutes()).toBe(0)
+  })
+
+  it("10:00 UTC → 10:00 UTC (pas de décalage)", () => {
+    const result = parseLocalDateTime("2026-01-15", "10:00", "UTC")
+    expect(result.getUTCHours()).toBe(10)
+    expect(result.getUTCMinutes()).toBe(0)
+  })
+})
+
 describe("generateSlots", () => {
   const timezone = "Europe/Paris"
 
@@ -127,19 +214,47 @@ describe("generateSlots", () => {
     expect(slots).toHaveLength(1)
   })
 
-  it("generates slots across multiple ranges", () => {
+  it("generates slots across multiple ranges (pause déjeuner)", () => {
     const date = new Date("2026-03-10T00:00:00Z")
     const slots = generateSlots(
       date,
       [
-        { start: "09:00", end: "12:00" },
-        { start: "14:00", end: "17:00" },
+        { start: "10:00", end: "12:00" },
+        { start: "14:00", end: "18:00" },
       ],
       60,
       timezone
     )
-    // 3 morning + 3 afternoon
+    // 2 slots matin (10:00, 11:00) + 4 slots après-midi (14:00, 15:00, 16:00, 17:00)
     expect(slots).toHaveLength(6)
+  })
+
+  it("no slots generated between 12:00 and 14:00 (lunch break)", () => {
+    const date = new Date("2026-01-15T00:00:00Z") // hiver UTC+1
+    const slots = generateSlots(
+      date,
+      [
+        { start: "10:00", end: "12:00" },
+        { start: "14:00", end: "18:00" },
+      ],
+      60,
+      timezone
+    )
+    // Vérifier qu'aucun slot ne démarre entre 12h et 14h (UTC = 11h–13h)
+    const lunchSlots = slots.filter((s) => {
+      const utcH = s.startAt.getUTCHours()
+      return utcH >= 11 && utcH < 13 // 12:00–14:00 Paris hiver = 11:00–13:00 UTC
+    })
+    expect(lunchSlots).toHaveLength(0)
+  })
+
+  it("slot startAt corresponds to correct UTC time (Paris hiver UTC+1)", () => {
+    const date = new Date("2026-01-15T00:00:00Z")
+    const slots = generateSlots(date, [{ start: "10:00", end: "11:00" }], 60, timezone)
+    expect(slots).toHaveLength(1)
+    // 10:00 Paris hiver = 09:00 UTC
+    expect(slots[0].startAt.getUTCHours()).toBe(9)
+    expect(slots[0].endAt.getUTCHours()).toBe(10)
   })
 
   it("returns empty array for empty ranges", () => {
@@ -154,6 +269,49 @@ describe("generateSlots", () => {
     expect(slots).toHaveLength(1) // Only 10:00–11:30 fits
     const diff = (slots[0].endAt.getTime() - slots[0].startAt.getTime()) / 60000
     expect(diff).toBe(90)
+  })
+})
+
+describe("normalizeOpenRanges", () => {
+  it("retourne les ranges déjà corrects sans modification", () => {
+    const input = [
+      { start: "10:00", end: "12:00" },
+      { start: "14:00", end: "18:00" },
+    ]
+    expect(normalizeOpenRanges(input)).toEqual(input)
+  })
+
+  it("extrait HH:mm depuis une ISO string", () => {
+    const input = [
+      { start: "2024-01-15T10:00:00.000Z", end: "2024-01-15T12:00:00.000Z" },
+    ]
+    expect(normalizeOpenRanges(input)).toEqual([{ start: "10:00", end: "12:00" }])
+  })
+
+  it("extrait HH:mm depuis un objet Date", () => {
+    const input = [
+      { start: new Date("2024-01-15T10:00:00.000Z"), end: new Date("2024-01-15T12:00:00.000Z") },
+    ]
+    const result = normalizeOpenRanges(input)
+    expect(result).toHaveLength(1)
+    expect(result[0].start).toBe("10:00")
+    expect(result[0].end).toBe("12:00")
+  })
+
+  it("filtre les entrées invalides", () => {
+    const input = [
+      { start: "10:00", end: "12:00" },
+      null,
+      { start: null, end: "12:00" },
+      "invalid",
+    ]
+    expect(normalizeOpenRanges(input)).toHaveLength(1)
+  })
+
+  it("retourne [] si input n'est pas un tableau", () => {
+    expect(normalizeOpenRanges(null)).toEqual([])
+    expect(normalizeOpenRanges({})).toEqual([])
+    expect(normalizeOpenRanges("invalid")).toEqual([])
   })
 })
 

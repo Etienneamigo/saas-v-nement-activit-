@@ -107,6 +107,13 @@ model Establishment {
   verifiedAt             DateTime?
   verifiedByAdminId      String?
 
+  // Accessibilité (PMR et autres)
+  accessWheelchair       Boolean  @default(false)  // Accès fauteuil roulant (PMR)
+  accessToilets          Boolean  @default(false)  // Toilettes accessibles PMR
+  accessParking          Boolean  @default(false)  // Parking PMR
+  accessElevator         Boolean  @default(false)  // Ascenseur disponible
+  accessLevelEntry       Boolean  @default(false)  // Accès plain-pied (sans marches)
+
   // Relations
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   activity   Activity?   // Relation 1:1 - un établissement = une activité

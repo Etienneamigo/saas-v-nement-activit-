@@ -10,6 +10,7 @@ import { SearchHero } from "@/components/search/SearchHero"
 import { useGeolocation } from "@/components/providers/GeolocationProvider"
 import { getPopularActivities, getEveningActivities, getAdminPickActivities, type HomeActivity } from "@/app/actions/home-sections"
 import { formatDistance } from "@/lib/geo"
+import { FeedFavoriteButton } from "@/components/FeedFavoriteButton"
 
 interface ActivityTypeOption {
   value: string
@@ -24,6 +25,7 @@ interface HomePageClientProps {
   heroImageDesktopUrl?: string | null
   heroImageMobileUrl?: string | null
   activityTypeOptions?: ActivityTypeOption[]
+  isAuthenticated?: boolean
 }
 
 // Normalize upload URLs to use API route for proper MIME type handling
@@ -40,6 +42,7 @@ export function HomePageClient({
   heroImageDesktopUrl,
   heroImageMobileUrl,
   activityTypeOptions,
+  isAuthenticated = false,
 }: HomePageClientProps) {
   const typeOptions = activityTypeOptions && activityTypeOptions.length > 0
     ? activityTypeOptions
@@ -151,6 +154,7 @@ export function HomePageClient({
         activities={popularActivities}
         loading={!sectionsLoaded}
         emptyMessage="Aucune activité populaire pour le moment"
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Section B: Quoi faire ce soir */}
@@ -160,6 +164,7 @@ export function HomePageClient({
         activities={eveningActivities}
         loading={!sectionsLoaded}
         emptyMessage="Pas d'activités de soirée trouvées"
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Section C: Coup de coeur Wadelo */}
@@ -169,6 +174,7 @@ export function HomePageClient({
         activities={adminPickActivities}
         loading={!sectionsLoaded}
         emptyMessage="Bientôt des coups de coeur Wadelo"
+        isAuthenticated={isAuthenticated}
       />
 
       {/* Activity Types Section — existing categories */}
@@ -236,7 +242,7 @@ export function HomePageClient({
 
 // ─── Activity Card for Home sections ───────────────────────────────────────────
 
-function HomeActivityCard({ activity }: { activity: HomeActivity }) {
+function HomeActivityCard({ activity, isAuthenticated }: { activity: HomeActivity; isAuthenticated: boolean }) {
   const firstImage = activity.medias[0]
 
   return (
@@ -246,7 +252,7 @@ function HomeActivityCard({ activity }: { activity: HomeActivity }) {
     >
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition-shadow h-full">
         {/* Image */}
-        <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
+        <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
           {firstImage ? (
             <img
               src={normalizeUploadUrl(firstImage.url)}
@@ -258,6 +264,14 @@ function HomeActivityCard({ activity }: { activity: HomeActivity }) {
               🎯
             </div>
           )}
+          {/* Bouton favori superposé sur l'image */}
+          <div className="absolute top-2 right-2 z-10">
+            <FeedFavoriteButton
+              activityId={activity.id}
+              initialFavorited={false}
+              isAuthenticated={isAuthenticated}
+            />
+          </div>
         </div>
 
         {/* Content */}
@@ -312,12 +326,14 @@ function HomeSection({
   activities,
   loading,
   emptyMessage,
+  isAuthenticated,
 }: {
   title: string
   icon: React.ReactNode
   activities: HomeActivity[]
   loading: boolean
   emptyMessage: string
+  isAuthenticated: boolean
 }) {
   if (!loading && activities.length === 0) return null
 
@@ -348,7 +364,7 @@ function HomeSection({
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
             {activities.map((activity) => (
-              <HomeActivityCard key={activity.id} activity={activity} />
+              <HomeActivityCard key={activity.id} activity={activity} isAuthenticated={isAuthenticated} />
             ))}
           </div>
         )}
