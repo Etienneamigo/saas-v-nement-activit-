@@ -6,6 +6,10 @@ import { auth } from "@/lib/auth"
 import { getAvailableSlots } from "@/lib/availability"
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
+import {
+  sendReservationConfirmationEmail,
+  sendReservationNotificationToEstablishment,
+} from "@/lib/email-reservation"
 
 // ─── Schémas Zod ────────────────────────────────────────────────────────────
 
@@ -62,6 +66,8 @@ const createReservationSchema = z.object({
   customerEmail: z.string().email("Email invalide"),
   customerPhone: z.string().optional(),
   customFieldValues: z.record(z.string(), z.string()).default({}),
+  slotId: z.string().cuid().optional().nullable(),
+  resourceId: z.string().cuid().optional().nullable(),
 })
 
 const overrideSchema = z.object({
@@ -233,7 +239,17 @@ export async function createReservation(data: unknown) {
     return { error: parsed.error.issues[0].message }
   }
 
-  const { establishmentId, startAt: startAtStr, partySize, customerName, customerEmail, customerPhone, customFieldValues } = parsed.data
+  const {
+    establishmentId,
+    startAt: startAtStr,
+    partySize,
+    customerName,
+    customerEmail,
+    customerPhone,
+    customFieldValues,
+    slotId,
+    resourceId,
+  } = parsed.data
 
   const startAt = new Date(startAtStr)
 
@@ -272,31 +288,53 @@ export async function createReservation(data: unknown) {
   // ─── Transaction avec vérification de capacité ───────────────────────────
   try {
     const reservation = await prisma.$transaction(async (tx) => {
-      // Re-check capacité dans la transaction (verrou logique via agrégat)
-      const booked = await tx.reservation.aggregate({
-        where: {
-          establishmentId,
-          status: "CONFIRMED",
-          startAt,
-        },
-        _sum: { partySize: true },
-      })
+      let capacity: number
+      let resolvedResourceId: string | null = resourceId ?? null
 
-      const alreadyBooked = booked._sum.partySize ?? 0
+      if (slotId) {
+        // ── Mode slots persistés ──────────────────────────────────────────
+        const slot = await tx.reservationSlot.findUnique({ where: { id: slotId } })
+        if (!slot || !slot.isActive) throw new Error("SLOT_UNAVAILABLE")
 
-      // Vérifier l'override pour la capacité
-      const override = await tx.reservationOverride.findUnique({
-        where: {
-          establishmentId_date: {
+        capacity = slot.capacity
+
+        // Si le slot a une ressource, l'utiliser
+        if (slot.resourceId) {
+          resolvedResourceId = slot.resourceId
+        }
+
+        // Compter les réservations sur ce slot
+        const booked = await tx.reservation.aggregate({
+          where: { slotId, status: "CONFIRMED" },
+          _sum: { partySize: true },
+        })
+        const alreadyBooked = booked._sum.partySize ?? 0
+
+        if (alreadyBooked + partySize > capacity) throw new Error("SLOT_FULL")
+      } else {
+        // ── Mode à la volée ───────────────────────────────────────────────
+        const booked = await tx.reservation.aggregate({
+          where: {
             establishmentId,
-            date: new Date(startAt.toISOString().split("T")[0]),
+            status: "CONFIRMED",
+            startAt,
+            slotId: null,
           },
-        },
-      })
-      const capacity = override?.customCapacity ?? settings.capacityPerSlot
+          _sum: { partySize: true },
+        })
+        const alreadyBooked = booked._sum.partySize ?? 0
 
-      if (alreadyBooked + partySize > capacity) {
-        throw new Error("SLOT_FULL")
+        const override = await tx.reservationOverride.findUnique({
+          where: {
+            establishmentId_date: {
+              establishmentId,
+              date: new Date(startAt.toISOString().split("T")[0]),
+            },
+          },
+        })
+        capacity = override?.customCapacity ?? settings.capacityPerSlot
+
+        if (alreadyBooked + partySize > capacity) throw new Error("SLOT_FULL")
       }
 
       // Créer la réservation
@@ -305,6 +343,8 @@ export async function createReservation(data: unknown) {
           settingsId: settings.id,
           establishmentId,
           userId: session?.user?.id ?? null,
+          slotId: slotId ?? null,
+          resourceId: resolvedResourceId,
           startAt,
           endAt,
           partySize,
@@ -319,17 +359,54 @@ export async function createReservation(data: unknown) {
             })),
           },
         },
-        include: { customValues: true },
+        include: {
+          customValues: true,
+          establishment: {
+            select: {
+              name: true,
+              address: true,
+              city: true,
+              phone: true,
+              activity: { select: { title: true } },
+            },
+          },
+        },
       })
 
       return newReservation
     })
+
+    // ── Email de confirmation (non bloquant) ────────────────────────────────
+    const emailTo = customerEmail
+    if (emailTo) {
+      sendReservationConfirmationEmail({
+        customerName,
+        customerEmail: emailTo,
+        establishmentName: reservation.establishment.name,
+        establishmentAddress: reservation.establishment.address,
+        establishmentCity: reservation.establishment.city,
+        activityTitle: reservation.establishment.activity?.title,
+        startAt: reservation.startAt,
+        endAt: reservation.endAt,
+        partySize: reservation.partySize,
+        cancellationPolicyText: settings.cancellationPolicyText,
+        reservationId: reservation.id,
+      }).catch((err) => console.error("Email confirmation error:", err))
+    }
+
+    // ── Email à l'établissement (si phone comme proxy — skip si non configuré) ─
+    // Note: l'établissement peut avoir un email de notification dans le futur
+    // Pour l'instant on utilise le user.email si disponible via l'établissement
+    // (skip sans crash)
 
     revalidatePath(`/activite`)
     return { reservation }
   } catch (err) {
     if (err instanceof Error && err.message === "SLOT_FULL") {
       return { error: "Ce créneau est complet. Veuillez choisir un autre horaire." }
+    }
+    if (err instanceof Error && err.message === "SLOT_UNAVAILABLE") {
+      return { error: "Ce créneau n'est plus disponible." }
     }
     console.error("createReservation error:", err)
     return { error: "Erreur lors de la création de la réservation" }

@@ -30,6 +30,8 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
+  Calendar,
+  Warehouse,
 } from "lucide-react"
 import type {
   ReservationSettings,
@@ -37,7 +39,10 @@ import type {
   ReservationOverride,
   Reservation,
   ReservationCustomFieldDef,
+  ReservationResource,
 } from "@prisma/client"
+import { SlotsTab } from "./SlotsTab"
+import { ResourcesTab } from "./ResourcesTab"
 
 type SettingsWithRelations = ReservationSettings & {
   weeklySchedule: WeeklySchedule[]
@@ -56,6 +61,7 @@ interface Props {
   initialSettings: SettingsWithRelations | null
   initialOverrides: ReservationOverride[]
   initialReservations: ReservationWithRelations[]
+  initialResources: ReservationResource[]
 }
 
 const DAYS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
@@ -76,8 +82,9 @@ function formatDateTime(date: Date) {
   }).format(new Date(date))
 }
 
-export function ReservationsClient({ initialSettings, initialOverrides, initialReservations }: Props) {
-  const [tab, setTab] = useState<"settings" | "list">("settings")
+export function ReservationsClient({ initialSettings, initialOverrides, initialReservations, initialResources }: Props) {
+  const [tab, setTab] = useState<"settings" | "slots" | "resources" | "list">("settings")
+  const [resources, setResources] = useState(initialResources)
   const [isSaving, setIsSaving] = useState(false)
 
   // Settings form state
@@ -243,15 +250,17 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-100">
+      <div className="flex gap-1 border-b border-gray-100 overflow-x-auto">
         {[
           { key: "settings", label: "Paramètres", icon: Settings },
+          { key: "slots", label: "Créneaux", icon: Calendar },
+          { key: "resources", label: "Salles", icon: Warehouse },
           { key: "list", label: "Réservations reçues", icon: List },
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => setTab(key as "settings" | "list")}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            onClick={() => setTab(key as "settings" | "slots" | "resources" | "list")}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
               tab === key
                 ? "border-gray-900 text-gray-900"
                 : "border-transparent text-gray-500 hover:text-gray-700"
@@ -656,6 +665,38 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
             </div>
           )}
         </div>
+      )}
+
+      {/* ── SLOTS TAB ────────────────────────────────────────────────────── */}
+      {tab === "slots" && (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            <strong>Note :</strong> Une fois des créneaux persistés créés, ils ont la priorité sur la
+            génération automatique. Les paramètres (onglet Paramètres) servent de base pour la
+            génération initiale.
+          </div>
+          <SlotsTab resources={resources.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }))} />
+        </div>
+      )}
+
+      {/* ── RESOURCES TAB ────────────────────────────────────────────────── */}
+      {tab === "resources" && (
+        <ResourcesTab
+          initialResources={resources.map((r) => ({
+            id: r.id,
+            name: r.name,
+            capacity: r.capacity,
+            isActive: r.isActive,
+          }))}
+          onResourcesChange={(updated) =>
+            setResources(updated.map((r) => ({
+              ...r,
+              establishmentId: resources[0]?.establishmentId ?? "",
+              createdAt: resources.find((x) => x.id === r.id)?.createdAt ?? new Date(),
+              updatedAt: new Date(),
+            })))
+          }
+        />
       )}
     </div>
   )

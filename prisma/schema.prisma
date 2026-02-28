@@ -122,6 +122,8 @@ model Establishment {
   reservationSettings  ReservationSettings?
   reservations         Reservation[]
   reservationOverrides ReservationOverride[]
+  reservationResources ReservationResource[]
+  reservationSlots     ReservationSlot[]
 }
 
 // Modèle Activité (unique par établissement)
@@ -383,6 +385,8 @@ model Reservation {
   settingsId      String
   establishmentId String
   userId          String?
+  slotId          String?           // FK ReservationSlot (si slots persistés)
+  resourceId      String?           // FK ReservationResource (si multi-salles)
   startAt         DateTime
   endAt           DateTime
   partySize       Int
@@ -397,11 +401,14 @@ model Reservation {
   settings      ReservationSettings         @relation(fields: [settingsId], references: [id], onDelete: Cascade)
   establishment Establishment               @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
   user          User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  slot          ReservationSlot?            @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  resource      ReservationResource?        @relation(fields: [resourceId], references: [id], onDelete: SetNull)
   customValues  ReservationCustomFieldValue[]
 
   @@index([establishmentId, startAt])
   @@index([establishmentId, status])
   @@index([userId])
+  @@index([slotId])
 }
 
 // Définitions de champs personnalisés par établissement
@@ -432,6 +439,50 @@ model ReservationCustomFieldValue {
   fieldDef    ReservationCustomFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
 
   @@unique([reservationId, fieldDefId])
+}
+
+// Ressource réservable (ex: salle d'escape game)
+model ReservationResource {
+  id              String   @id @default(cuid())
+  establishmentId String
+  name            String   // ex: "Salle A"
+  capacity        Int
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  establishment Establishment     @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  slots         ReservationSlot[]
+  reservations  Reservation[]
+
+  @@index([establishmentId])
+}
+
+// Source d'un créneau persisté
+enum SlotSource {
+  AUTO   // Généré depuis WeeklySchedule
+  MANUAL // Créé manuellement par l'établissement
+}
+
+// Créneau persisté (éditable par l'établissement)
+model ReservationSlot {
+  id              String     @id @default(cuid())
+  establishmentId String
+  startAt         DateTime
+  endAt           DateTime
+  capacity        Int
+  isActive        Boolean    @default(true)
+  resourceId      String?    // nullable → salle spécifique
+  source          SlotSource @default(AUTO)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  establishment Establishment        @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  resource      ReservationResource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  reservations  Reservation[]
+
+  @@index([establishmentId, startAt])
+  @@index([resourceId, startAt])
 }
 
 // ─── Fin Réservation Native ───────────────────────────────────────────────────

@@ -1,9 +1,10 @@
 /**
  * Service de disponibilité pour les réservations natives.
  * Calcule les créneaux disponibles en tenant compte :
- * - des horaires hebdomadaires
- * - des overrides (fermetures ou horaires custom)
+ * - des ReservationSlot persistés (prioritaire si présents)
+ * - des horaires hebdomadaires + overrides (fallback si pas de slots persistés)
  * - des réservations déjà confirmées (capacité restante)
+ * - des ressources (salles) si multi-ressources activé
  */
 
 import { prisma } from "@/lib/db"
@@ -19,6 +20,10 @@ export interface SlotInfo {
   endAt: Date
   remainingCapacity: number
   isAvailable: boolean
+  slotId?: string             // ID du ReservationSlot persisté si applicable
+  resourceId?: string         // ID de la ressource si multi-salles
+  resourceName?: string       // Nom de la ressource
+  isPersisted?: boolean       // true si slot vient de la table ReservationSlot
 }
 
 type SettingsWithSchedule = ReservationSettings & {
@@ -27,6 +32,7 @@ type SettingsWithSchedule = ReservationSettings & {
 
 /**
  * Génère les créneaux disponibles pour un établissement sur une date donnée.
+ * Priorité : ReservationSlot persistés > génération à la volée depuis WeeklySchedule.
  */
 export async function getAvailableSlots(
   establishmentId: string,
@@ -45,8 +51,20 @@ export async function getAvailableSlots(
   maxDate.setDate(maxDate.getDate() + settings.bookingWindowDays)
   if (date > maxDate) return []
 
-  // Normalise la date au début du jour en Europe/Paris
   const dateStr = formatDateLocal(date, settings.timezone)
+  const dayStart = new Date(`${dateStr}T00:00:00.000Z`)
+  const dayEnd = new Date(`${dateStr}T23:59:59.999Z`)
+
+  // Vérifier si des slots persistés existent pour ce jour
+  const persistedSlots = await prisma.reservationSlot.findMany({
+    where: {
+      establishmentId,
+      startAt: { gte: dayStart, lte: dayEnd },
+      isActive: true,
+    },
+    include: { resource: true },
+    orderBy: { startAt: "asc" },
+  })
 
   // Vérifier override pour ce jour
   const override = await prisma.reservationOverride.findUnique({
@@ -60,7 +78,95 @@ export async function getAvailableSlots(
 
   if (override?.isClosed) return []
 
-  // Déterminer les ranges d'ouverture pour ce jour
+  if (persistedSlots.length > 0) {
+    // ─── Mode slots persistés ────────────────────────────────────────────────
+    return getAvailabilityFromPersistedSlots(
+      establishmentId,
+      persistedSlots,
+      settings,
+      now
+    )
+  } else {
+    // ─── Mode génération à la volée ──────────────────────────────────────────
+    return getAvailabilityFromWeeklySchedule(
+      establishmentId,
+      date,
+      dateStr,
+      settings,
+      override,
+      now
+    )
+  }
+}
+
+// ─── Availability depuis slots persistés ────────────────────────────────────
+
+async function getAvailabilityFromPersistedSlots(
+  establishmentId: string,
+  slots: Array<{
+    id: string
+    startAt: Date
+    endAt: Date
+    capacity: number
+    isActive: boolean
+    resourceId: string | null
+    resource: { id: string; name: string; capacity: number } | null
+  }>,
+  settings: ReservationSettings,
+  now: Date
+): Promise<SlotInfo[]> {
+  const minStartAt = new Date(now.getTime() + settings.minNoticeMinutes * 60 * 1000)
+  const futureSlots = slots.filter((s) => s.startAt >= minStartAt)
+
+  if (futureSlots.length === 0) return []
+
+  // Compter les réservations confirmées par slot
+  const slotIds = futureSlots.map((s) => s.id)
+  const reservationsBySlot = await prisma.reservation.groupBy({
+    by: ["slotId"],
+    where: {
+      establishmentId,
+      status: "CONFIRMED",
+      slotId: { in: slotIds },
+    },
+    _sum: { partySize: true },
+  })
+
+  const bookedBySlot = new Map<string, number>()
+  for (const r of reservationsBySlot) {
+    if (r.slotId) bookedBySlot.set(r.slotId, r._sum.partySize ?? 0)
+  }
+
+  // Pour les slots sans resourceId : utiliser la capacité du slot directement
+  // Pour les slots avec resourceId : capacité = resource.capacity (ou slot.capacity)
+  return futureSlots.map((slot) => {
+    const booked = bookedBySlot.get(slot.id) ?? 0
+    const capacity = slot.capacity
+    const remaining = Math.max(0, capacity - booked)
+
+    return {
+      startAt: slot.startAt,
+      endAt: slot.endAt,
+      remainingCapacity: remaining,
+      isAvailable: remaining > 0,
+      slotId: slot.id,
+      resourceId: slot.resourceId ?? undefined,
+      resourceName: slot.resource?.name,
+      isPersisted: true,
+    }
+  })
+}
+
+// ─── Availability depuis WeeklySchedule (fallback) ──────────────────────────
+
+async function getAvailabilityFromWeeklySchedule(
+  establishmentId: string,
+  date: Date,
+  dateStr: string,
+  settings: ReservationSettings & { weeklySchedule: WeeklySchedule[] },
+  override: ReservationOverride | null,
+  now: Date
+): Promise<SlotInfo[]> {
   const dayOfWeek = getDayOfWeekInTz(date, settings.timezone)
   let openRanges: TimeRange[]
 
@@ -68,22 +174,19 @@ export async function getAvailableSlots(
     openRanges = normalizeOpenRanges(override.customOpenRanges)
   } else {
     const schedule = settings.weeklySchedule.find((s) => s.dayOfWeek === dayOfWeek)
-    if (!schedule) return [] // Pas d'horaires ce jour
+    if (!schedule) return []
     openRanges = normalizeOpenRanges(schedule.openRanges)
   }
 
   const capacityPerSlot = override?.customCapacity ?? settings.capacityPerSlot
 
-  // Générer tous les créneaux à partir des ranges
   const allSlots = generateSlots(date, openRanges, settings.slotDurationMinutes, settings.timezone)
 
-  // Filtrer les créneaux dans le passé + minNotice
   const minStartAt = new Date(now.getTime() + settings.minNoticeMinutes * 60 * 1000)
   const futureSlots = allSlots.filter((s) => s.startAt >= minStartAt)
 
   if (futureSlots.length === 0) return []
 
-  // Compter les réservations confirmées sur ces créneaux
   const slotStartTimes = futureSlots.map((s) => s.startAt)
   const minStart = slotStartTimes[0]
   const maxEnd = futureSlots[futureSlots.length - 1].endAt
@@ -94,6 +197,7 @@ export async function getAvailableSlots(
       establishmentId,
       status: "CONFIRMED",
       startAt: { gte: minStart, lte: maxEnd },
+      slotId: null, // Uniquement les réservations sans slot persisté
     },
     _sum: { partySize: true },
   })
@@ -111,17 +215,84 @@ export async function getAvailableSlots(
       endAt: slot.endAt,
       remainingCapacity: Math.max(0, remaining),
       isAvailable: remaining > 0,
+      isPersisted: false,
     }
   })
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Génération de slots depuis WeeklySchedule ───────────────────────────────
 
 /**
- * Normalise openRanges provenant du JSON Prisma.
- * Protège contre les anciennes données mal stockées (objets Date ou ISO strings
- * au lieu de "HH:mm").
+ * Génère des ReservationSlot en base depuis les WeeklySchedule pour N jours.
+ * Appelé par l'action "Générer les créneaux".
  */
+export async function generateAndPersistSlots(
+  establishmentId: string,
+  daysAhead: number
+): Promise<{ created: number }> {
+  const settings = await prisma.reservationSettings.findUnique({
+    where: { establishmentId },
+    include: { weeklySchedule: true },
+  })
+
+  if (!settings || !settings.enabled) return { created: 0 }
+
+  const now = new Date()
+  let created = 0
+
+  for (let dayOffset = 0; dayOffset < daysAhead; dayOffset++) {
+    const targetDate = new Date(now)
+    targetDate.setDate(targetDate.getDate() + dayOffset)
+    const dateStr = formatDateLocal(targetDate, settings.timezone)
+
+    // Check override
+    const override = await prisma.reservationOverride.findUnique({
+      where: {
+        establishmentId_date: { establishmentId, date: new Date(dateStr) },
+      },
+    })
+    if (override?.isClosed) continue
+
+    const dayOfWeek = getDayOfWeekInTz(targetDate, settings.timezone)
+    let openRanges: TimeRange[]
+
+    if (override?.customOpenRanges) {
+      openRanges = normalizeOpenRanges(override.customOpenRanges)
+    } else {
+      const schedule = settings.weeklySchedule.find((s) => s.dayOfWeek === dayOfWeek)
+      if (!schedule) continue
+      openRanges = normalizeOpenRanges(schedule.openRanges)
+    }
+
+    const capacity = override?.customCapacity ?? settings.capacityPerSlot
+    const rawSlots = generateSlots(targetDate, openRanges, settings.slotDurationMinutes, settings.timezone)
+
+    for (const slot of rawSlots) {
+      // Skip si déjà existant (même startAt)
+      const existing = await prisma.reservationSlot.findFirst({
+        where: { establishmentId, startAt: slot.startAt },
+      })
+      if (existing) continue
+
+      await prisma.reservationSlot.create({
+        data: {
+          establishmentId,
+          startAt: slot.startAt,
+          endAt: slot.endAt,
+          capacity,
+          isActive: true,
+          source: "AUTO",
+        },
+      })
+      created++
+    }
+  }
+
+  return { created }
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
 function normalizeOpenRanges(raw: unknown): TimeRange[] {
   if (!Array.isArray(raw)) return []
 
@@ -139,9 +310,7 @@ function normalizeOpenRanges(raw: unknown): TimeRange[] {
 
 function normalizeTimeValue(value: unknown): string | null {
   if (typeof value === "string") {
-    // Déjà au format "HH:mm"
     if (/^\d{2}:\d{2}$/.test(value)) return value
-    // ISO string (ex: "2024-01-15T10:00:00.000Z") → extraire HH:mm
     const match = value.match(/T(\d{2}:\d{2})/)
     if (match) return match[1]
     return null
@@ -176,9 +345,6 @@ function generateSlots(
   return slots
 }
 
-/**
- * Retourne la date formatée YYYY-MM-DD dans la timezone de l'établissement.
- */
 function formatDateLocal(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat("fr-FR", {
     timeZone: timezone,
@@ -192,9 +358,6 @@ function formatDateLocal(date: Date, timezone: string): string {
     .join("-")
 }
 
-/**
- * Retourne le jour de la semaine (0=dim…6=sam) dans la timezone donnée.
- */
 function getDayOfWeekInTz(date: Date, timezone: string): number {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -207,32 +370,20 @@ function getDayOfWeekInTz(date: Date, timezone: string): number {
   return map[weekday ?? "Mon"] ?? 1
 }
 
-/**
- * Parse "YYYY-MM-DD" + "HH:mm" en Date UTC en tenant compte de la timezone.
- */
 function parseLocalDateTime(dateStr: string, timeStr: string, timezone: string): Date {
-  // On utilise Intl pour convertir l'heure locale → UTC
   const [year, month, day] = dateStr.split("-").map(Number)
   const [hour, minute] = timeStr.split(":").map(Number)
-
-  // Créer un Date en UTC puis ajuster avec l'offset de la timezone
-  // Technique : utiliser le formatter pour trouver l'offset
   const candidate = new Date(Date.UTC(year, month - 1, day, hour, minute))
   const offset = getTzOffsetMinutes(candidate, timezone)
   return new Date(candidate.getTime() - offset * 60 * 1000)
 }
 
-/**
- * Retourne l'offset en minutes de la timezone par rapport à UTC.
- * Positif pour UTC+ (ex: Europe/Paris hiver = +60, été = +120).
- *
- * Correction du bug original : l'ancienne version retournait -diff, ce qui
- * inversait l'offset et décalait les créneaux dans la mauvaise direction.
- */
 function getTzOffsetMinutes(date: Date, timezone: string): number {
   const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" })
   const tzStr = date.toLocaleString("en-US", { timeZone: timezone })
-  // diff > 0 si la timezone est en avance sur UTC (UTC+)
   const diff = (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
-  return diff  // Corrigé : était -diff (sens inversé)
+  return diff
 }
+
+// ─── Export des helpers pour les tests ──────────────────────────────────────
+export { formatDateLocal, getDayOfWeekInTz, generateSlots, normalizeOpenRanges }
