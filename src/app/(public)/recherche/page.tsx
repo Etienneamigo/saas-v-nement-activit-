@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import { SearchResults } from "./SearchResults"
 import { SearchPageHero } from "./SearchPageHero"
 import { prisma } from "@/lib/db"
+import { auth } from "@/lib/auth"
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -20,6 +21,7 @@ interface SearchPageProps {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams
+  const session = await auth()
 
   // Fetch activity types for the search dropdown
   let activityTypeOptions: { value: string; label: string }[] = []
@@ -34,6 +36,16 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     }))
   } catch {
     // Table might not exist yet
+  }
+
+  // Pre-fetch favorite IDs for the current user
+  let initialFavoritedIds: string[] = []
+  if (session?.user?.id && session.user.role === "USER") {
+    const favorites = await prisma.favorite.findMany({
+      where: { userId: session.user.id },
+      select: { activityId: true },
+    })
+    initialFavoritedIds = favorites.map((f) => f.activityId)
   }
 
   return (
@@ -51,7 +63,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
       <div className="container mx-auto px-4 py-8">
         <Suspense fallback={<SearchSkeleton />}>
-          <SearchResults params={params} />
+          <SearchResults
+            params={params}
+            isAuthenticated={!!session && session.user?.role === "USER"}
+            initialFavoritedIds={initialFavoritedIds}
+          />
         </Suspense>
       </div>
     </div>

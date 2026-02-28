@@ -73,6 +73,7 @@ model User {
   // Relations
   establishment Establishment?
   favorites     Favorite[]
+  reservations  Reservation[]
 }
 
 // Modèle Établissement
@@ -111,6 +112,9 @@ model Establishment {
   activity   Activity?   // Relation 1:1 - un établissement = une activité
   usedPromoCode PromoCode? @relation(fields: [usedPromoCodeId], references: [id])
   verificationRequests VerificationRequest[]
+  reservationSettings  ReservationSettings?
+  reservations         Reservation[]
+  reservationOverrides ReservationOverride[]
 }
 
 // Modèle Activité (unique par établissement)
@@ -291,6 +295,139 @@ model VideoCategoryConfig {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ─── Réservation Native ───────────────────────────────────────────────────────
+
+// Statut de réservation
+enum ReservationStatus {
+  CONFIRMED
+  CANCELLED
+  NO_SHOW
+}
+
+// Type de champ personnalisé
+enum CustomFieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  SELECT
+  PHONE
+  EMAIL
+  CHECKBOX
+}
+
+// Paramètres de réservation native par établissement
+model ReservationSettings {
+  id                       String   @id @default(cuid())
+  establishmentId          String   @unique
+  enabled                  Boolean  @default(false)
+  showExternalLinkAlso     Boolean  @default(false)
+  timezone                 String   @default("Europe/Paris")
+  slotDurationMinutes      Int      @default(60)
+  capacityPerSlot          Int      @default(10)
+  minPartySize             Int      @default(1)
+  maxPartySize             Int      @default(10)
+  minNoticeMinutes         Int      @default(120)   // Délai minimum avant réservation
+  bookingWindowDays        Int      @default(30)    // Fenêtre de réservation J+n
+  cancellationEnabled      Boolean  @default(true)
+  cancellationDeadlineHours Int     @default(24)
+  confirmationMessage      String?  @db.Text
+  cancellationPolicyText   String?  @db.Text
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  establishment      Establishment                   @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  weeklySchedule     WeeklySchedule[]
+  customFieldDefs    ReservationCustomFieldDef[]
+  reservations       Reservation[]
+}
+
+// Horaires hebdomadaires (un enregistrement par jour actif)
+model WeeklySchedule {
+  id         String   @id @default(cuid())
+  settingsId String
+  dayOfWeek  Int      // 0=Dimanche … 6=Samedi
+  openRanges Json     // [{start:"HH:mm", end:"HH:mm"}]
+
+  settings ReservationSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  @@unique([settingsId, dayOfWeek])
+  @@index([settingsId])
+}
+
+// Exceptions par date (fermetures ou horaires custom)
+model ReservationOverride {
+  id               String   @id @default(cuid())
+  establishmentId  String
+  date             DateTime @db.Date
+  isClosed         Boolean  @default(false)
+  customOpenRanges Json?    // [{start:"HH:mm", end:"HH:mm"}] si override horaires
+  customCapacity   Int?     // Capacité spéciale pour ce jour
+
+  establishment Establishment @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+
+  @@unique([establishmentId, date])
+  @@index([establishmentId, date])
+}
+
+// Réservation client
+model Reservation {
+  id              String            @id @default(cuid())
+  settingsId      String
+  establishmentId String
+  userId          String?
+  startAt         DateTime
+  endAt           DateTime
+  partySize       Int
+  status          ReservationStatus @default(CONFIRMED)
+  customerName    String?
+  customerEmail   String?
+  customerPhone   String?
+  cancelledAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  settings      ReservationSettings         @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  establishment Establishment               @relation(fields: [establishmentId], references: [id], onDelete: Cascade)
+  user          User?                       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customValues  ReservationCustomFieldValue[]
+
+  @@index([establishmentId, startAt])
+  @@index([establishmentId, status])
+  @@index([userId])
+}
+
+// Définitions de champs personnalisés par établissement
+model ReservationCustomFieldDef {
+  id              String          @id @default(cuid())
+  settingsId      String
+  label           String
+  type            CustomFieldType @default(TEXT)
+  required        Boolean         @default(false)
+  optionsJson     Json?           // Pour SELECT : ["option1","option2"]
+  order           Int             @default(0)
+  createdAt       DateTime        @default(now())
+
+  settings ReservationSettings         @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  values   ReservationCustomFieldValue[]
+
+  @@index([settingsId])
+}
+
+// Valeurs saisies par le client pour une réservation
+model ReservationCustomFieldValue {
+  id              String @id @default(cuid())
+  reservationId   String
+  fieldDefId      String
+  value           String @db.Text
+
+  reservation Reservation               @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  fieldDef    ReservationCustomFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
+
+  @@unique([reservationId, fieldDefId])
+}
+
+// ─── Fin Réservation Native ───────────────────────────────────────────────────
 
 // Demande de vérification d'un établissement
 model VerificationRequest {

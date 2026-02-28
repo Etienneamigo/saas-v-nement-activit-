@@ -19,6 +19,7 @@ import { ACTIVITY_TYPE_OPTIONS_PLAIN, DISTANCE_OPTIONS, ACTIVITY_TYPES, Activity
 import { formatDistance } from "@/lib/geo"
 import { useGeolocation } from "@/components/providers/GeolocationProvider"
 import { MapPin, Clock, Euro, Users, Search, SlidersHorizontal, List, Map as MapIcon, ChevronRight } from "lucide-react"
+import { FeedFavoriteButton } from "@/components/FeedFavoriteButton"
 
 // Dynamic import for the map to avoid SSR issues
 const ActivityMap = dynamic(
@@ -39,6 +40,8 @@ interface SearchResultsProps {
     sortBy?: string
     page?: string
   }
+  isAuthenticated?: boolean
+  initialFavoritedIds?: string[]
 }
 
 // Get or create a session ID for anonymous analytics tracking
@@ -61,7 +64,7 @@ function normalizeUploadUrl(url: string): string {
   return url
 }
 
-export function SearchResults({ params }: SearchResultsProps) {
+export function SearchResults({ params, isAuthenticated = false, initialFavoritedIds = [] }: SearchResultsProps) {
   const router = useRouter()
   const resultsRef = useRef<HTMLDivElement>(null)
   const { location: geoLocation } = useGeolocation()
@@ -375,7 +378,12 @@ export function SearchResults({ params }: SearchResultsProps) {
           {/* Activity List */}
           <div className="divide-y divide-gray-100">
             {activities.map((activity) => (
-              <ActivityCard key={activity.id} activity={activity} />
+              <ActivityCard
+                key={activity.id}
+                activity={activity}
+                isAuthenticated={isAuthenticated}
+                isFavorited={initialFavoritedIds.includes(activity.id)}
+              />
             ))}
           </div>
 
@@ -396,7 +404,15 @@ export function SearchResults({ params }: SearchResultsProps) {
   )
 }
 
-function ActivityCard({ activity }: { activity: ActivityWithDistance }) {
+function ActivityCard({
+  activity,
+  isAuthenticated,
+  isFavorited,
+}: {
+  activity: ActivityWithDistance
+  isAuthenticated: boolean
+  isFavorited: boolean
+}) {
   const typeInfo = ACTIVITY_TYPES[activity.type as ActivityTypeKey]
   const firstImage = activity.medias.find((m) => m.kind === "IMAGE")
 
@@ -461,8 +477,15 @@ function ActivityCard({ activity }: { activity: ActivityWithDistance }) {
           </div>
         </div>
 
-        {/* Arrow */}
-        <ChevronRight className="h-4 w-4 text-gray-300 mt-3 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+        {/* Favorite + Arrow */}
+        <div className="flex items-center gap-1 mt-2 flex-shrink-0">
+          <FeedFavoriteButton
+            activityId={activity.id}
+            initialFavorited={isFavorited}
+            isAuthenticated={isAuthenticated}
+          />
+          <ChevronRight className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
       </div>
     </Link>
   )

@@ -37,13 +37,22 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
       medias: {
         orderBy: { createdAt: "desc" },
       },
-      establishment: true,
+      establishment: {
+        include: {
+          reservationSettings: {
+            include: {
+              weeklySchedule: { orderBy: { dayOfWeek: "asc" } },
+              customFieldDefs: { orderBy: { order: "asc" } },
+            },
+          },
+        },
+      },
       events: {
         where: {
           startAt: { gte: new Date() },
         },
         orderBy: { startAt: "asc" },
-        take: 10, // Limit to next 10 events
+        take: 10,
       },
       _count: {
         select: { favorites: true },
@@ -69,15 +78,19 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
     isFavorited = !!favorite
   }
 
+  // Separate reservationSettings from establishment to pass flat establishment to ActivityDetail
+  const { reservationSettings, ...establishment } = activity.establishment
+
   return (
     <>
       {/* Track click/view via client-side component */}
       <ClickTracker activityId={activity.id} />
       <ActivityDetail
-        activity={activity}
+        activity={{ ...activity, establishment }}
         isFavorited={isFavorited}
         isAuthenticated={!!session}
         userId={session?.user?.id}
+        reservationSettings={reservationSettings ?? null}
       />
     </>
   )

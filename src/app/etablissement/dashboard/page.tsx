@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ACTIVITY_TYPES, ActivityTypeKey } from "@/lib/constants"
-import { Plus, Eye, Heart, Edit, MapPin, ExternalLink, Settings, CreditCard, AlertCircle, BadgeCheck, ShieldCheck } from "lucide-react"
+import { Plus, Eye, Heart, Edit, MapPin, ExternalLink, Settings, CreditCard, AlertCircle, BadgeCheck, ShieldCheck, CalendarCheck } from "lucide-react"
 import { ActivityActions } from "./ActivityActions"
 import { AnalyticsCard } from "./AnalyticsCard"
 import { getSubscriptionDisplayState, isSubscriptionActive } from "@/lib/subscription"
@@ -269,7 +269,7 @@ export default async function DashboardPage() {
           </Card>
 
           {/* Actions rapides */}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
               <Link href={`/etablissement/activites/${activity.id}`}>
                 <CardHeader>
@@ -306,6 +306,25 @@ export default async function DashboardPage() {
                 <CardContent>
                   <p className="text-sm text-muted-foreground">
                     Ouvre dans un nouvel onglet
+                  </p>
+                </CardContent>
+              </Link>
+            </Card>
+
+            <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
+              <Link href="/etablissement/reservations">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <CalendarCheck className="h-5 w-5" />
+                    Réservations
+                  </CardTitle>
+                  <CardDescription>
+                    Configurez et gérez vos réservations natives
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Créneaux, horaires, champs personnalisés
                   </p>
                 </CardContent>
               </Link>

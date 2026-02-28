@@ -23,8 +23,9 @@ import {
   ChevronDown,
   BadgeCheck,
 } from "lucide-react"
-import type { Activity, Media, Establishment, Event } from "@prisma/client"
+import type { Activity, Media, Establishment, Event, ReservationSettings, WeeklySchedule, ReservationCustomFieldDef } from "@prisma/client"
 import { EventsCarousel } from "./EventsCarousel"
+import { BookingWidget } from "./BookingWidget"
 import { MediaGrid } from "./MediaGrid"
 import { StreamHlsVideo } from "@/components/video/StreamHlsVideo"
 import { normalizeUploadUrl, isHlsUrl } from "@/lib/video-utils"
@@ -33,6 +34,11 @@ const ActivityMap = dynamic(
   () => import("@/components/map/ActivityMap").then((mod) => mod.ActivityMap),
   { ssr: false, loading: () => <div className="h-64 bg-gray-100 rounded-lg animate-pulse" /> }
 )
+
+type ReservationSettingsWithRelations = ReservationSettings & {
+  weeklySchedule: WeeklySchedule[]
+  customFieldDefs: ReservationCustomFieldDef[]
+}
 
 interface ActivityDetailProps {
   activity: Activity & {
@@ -44,12 +50,14 @@ interface ActivityDetailProps {
   isFavorited: boolean
   isAuthenticated: boolean
   userId?: string
+  reservationSettings?: ReservationSettingsWithRelations | null
 }
 
 export function ActivityDetail({
   activity,
   isFavorited: initialFavorited,
   isAuthenticated,
+  reservationSettings,
 }: ActivityDetailProps) {
   const [isFavorited, setIsFavorited] = useState(initialFavorited)
   const [isLoading, setIsLoading] = useState(false)
@@ -170,11 +178,21 @@ export function ActivityDetail({
 
       {/* Centralized CTA row */}
       <div className="flex flex-wrap items-center gap-2 mb-8">
+        {/* Bouton réservation externe :
+            - toujours affiché si réservation native désactivée
+            - affiché en secondaire si native activée + showExternalLinkAlso */}
         {activity.establishment.bookingUrl && (
-          <Button asChild size="sm" className="bg-gray-900 hover:bg-black text-white">
+          !reservationSettings?.enabled || reservationSettings?.showExternalLinkAlso
+        ) && (
+          <Button
+            asChild
+            size="sm"
+            className={reservationSettings?.enabled ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50" : "bg-gray-900 hover:bg-black text-white"}
+            variant={reservationSettings?.enabled ? "outline" : "default"}
+          >
             <a href={activity.establishment.bookingUrl} target="_blank" rel="noopener noreferrer">
               <CalendarCheck className="h-3.5 w-3.5 mr-1.5" />
-              Réserver
+              {reservationSettings?.enabled ? "Réserver sur le site officiel" : "Réserver"}
             </a>
           </Button>
         )}
@@ -213,6 +231,17 @@ export function ActivityDetail({
           </Button>
         )}
       </div>
+
+      {/* Widget réservation native */}
+      {reservationSettings?.enabled && (
+        <div className="mb-8">
+          <BookingWidget
+            establishmentId={activity.establishment.id}
+            settings={reservationSettings}
+            isAuthenticated={isAuthenticated}
+          />
+        </div>
+      )}
 
       {/* Description */}
       <div className="mb-10">
