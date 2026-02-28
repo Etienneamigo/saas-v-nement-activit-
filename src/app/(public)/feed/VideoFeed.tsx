@@ -53,9 +53,11 @@ interface FeedVideo {
 
 interface VideoFeedProps {
   isAuthenticated?: boolean
+  /** IDs des activités déjà en favoris (pré-chargé SSR pour éviter le flicker) */
+  favoritedActivityIds?: string[]
 }
 
-export function VideoFeed({ isAuthenticated = false }: VideoFeedProps) {
+export function VideoFeed({ isAuthenticated = false, favoritedActivityIds = [] }: VideoFeedProps) {
   const router = useRouter()
   const [videos, setVideos] = useState<FeedVideo[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -69,6 +71,10 @@ export function VideoFeed({ isAuthenticated = false }: VideoFeedProps) {
   const [isGeolocating, setIsGeolocating] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map())
+  // Source de vérité locale des favoris (initialisée SSR, mise à jour à chaque toggle)
+  const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
+    () => new Set(favoritedActivityIds)
+  )
 
   const fetchVideos = useCallback(async (reset = false) => {
     setIsLoading(true)
@@ -403,13 +409,25 @@ export function VideoFeed({ isAuthenticated = false }: VideoFeedProps) {
                   </Button>
                 </div>
 
-                {/* Bouton favoris — z-index correct, ne bloque pas le scroll */}
+                {/* Bouton favoris — branché sur la source de vérité locale */}
                 <div className="flex-shrink-0 pointer-events-auto">
                   <FavoriteButton
                     activityId={video.activity.id}
+                    isFavorited={favoritedIds.has(video.activity.id)}
                     isAuthenticated={isAuthenticated}
                     size="md"
                     className="bg-black/40 hover:bg-black/60 text-white hover:text-red-400 border-0 shadow-lg"
+                    onToggle={(newState) => {
+                      setFavoritedIds((prev) => {
+                        const next = new Set(prev)
+                        if (newState) {
+                          next.add(video.activity.id)
+                        } else {
+                          next.delete(video.activity.id)
+                        }
+                        return next
+                      })
+                    }}
                   />
                 </div>
               </div>

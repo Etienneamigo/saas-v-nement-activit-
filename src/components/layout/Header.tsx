@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { logoutAction } from "@/app/actions/auth"
-import { User, LogOut, Building2, Heart, Shield, CreditCard, Settings } from "lucide-react"
+import { User, LogOut, Building2, Heart, Shield, CreditCard, Settings, CalendarCheck } from "lucide-react"
 
 export function Header() {
   const { data: session, status } = useSession()
@@ -101,12 +101,20 @@ export function Header() {
                 </div>
                 <DropdownMenuSeparator />
                 {session.user.role === "USER" && (
-                  <DropdownMenuItem asChild>
-                    <Link href="/favoris" className="cursor-pointer">
-                      <Heart className="mr-2 h-4 w-4" />
-                      Mes favoris
-                    </Link>
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/profil/reservations" className="cursor-pointer">
+                        <CalendarCheck className="mr-2 h-4 w-4" />
+                        Mes réservations
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/favoris" className="cursor-pointer">
+                        <Heart className="mr-2 h-4 w-4" />
+                        Mes favoris
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
                 )}
                 {session.user.role === "ESTABLISHMENT" && (
                   <>

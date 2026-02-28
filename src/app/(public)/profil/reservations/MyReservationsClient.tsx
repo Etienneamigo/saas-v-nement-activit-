@@ -95,9 +95,13 @@ function ReservationCard({
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{reservation.establishment.name}</p>
         </div>
-        <Link href={`/activite/${reservation.establishment.activity?.title ? "" : ""}`}>
-          <ChevronRight className="h-5 w-5 text-gray-300 mt-1" />
-        </Link>
+        {reservation.establishment.activity?.id ? (
+          <Link href={`/activite/${reservation.establishment.activity.id}`}>
+            <ChevronRight className="h-5 w-5 text-gray-300 mt-1" />
+          </Link>
+        ) : (
+          <ChevronRight className="h-5 w-5 text-gray-200 mt-1" />
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4 text-sm text-gray-600">

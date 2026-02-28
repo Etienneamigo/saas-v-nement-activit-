@@ -27,7 +27,7 @@ import {
   ArrowUpDown,
   DoorOpen,
 } from "lucide-react"
-import type { Activity, Media, Establishment, Event, ReservationSettings, WeeklySchedule, ReservationCustomFieldDef } from "@prisma/client"
+import type { Activity, Media, Establishment, Event, ReservationSettings, WeeklySchedule, ReservationCustomFieldDef, ReservationResource } from "@prisma/client"
 import { EventsCarousel } from "./EventsCarousel"
 import { BookingWidget } from "./BookingWidget"
 import { MediaGrid } from "./MediaGrid"
@@ -55,6 +55,7 @@ interface ActivityDetailProps {
   isAuthenticated: boolean
   userId?: string
   reservationSettings?: ReservationSettingsWithRelations | null
+  reservationResources?: ReservationResource[]
 }
 
 export function ActivityDetail({
@@ -62,6 +63,7 @@ export function ActivityDetail({
   isFavorited: initialFavorited,
   isAuthenticated,
   reservationSettings,
+  reservationResources = [],
 }: ActivityDetailProps) {
   const [isFavorited, setIsFavorited] = useState(initialFavorited)
   const [isLoading, setIsLoading] = useState(false)
@@ -242,6 +244,7 @@ export function ActivityDetail({
           <BookingWidget
             establishmentId={activity.establishment.id}
             settings={reservationSettings}
+            resources={reservationResources}
             isAuthenticated={isAuthenticated}
           />
         </div>

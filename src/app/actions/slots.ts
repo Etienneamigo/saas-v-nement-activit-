@@ -360,7 +360,7 @@ export async function getUserReservations(filter?: "upcoming" | "past") {
           name: true,
           address: true,
           city: true,
-          activity: { select: { title: true, type: true } },
+          activity: { select: { id: true, title: true, type: true } },
         },
       },
       settings: {

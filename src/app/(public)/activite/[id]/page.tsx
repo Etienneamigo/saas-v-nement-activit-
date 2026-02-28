@@ -45,6 +45,10 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
               customFieldDefs: { orderBy: { order: "asc" } },
             },
           },
+          reservationResources: {
+            where: { isActive: true },
+            orderBy: { createdAt: "asc" },
+          },
         },
       },
       events: {
@@ -78,8 +82,8 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
     isFavorited = !!favorite
   }
 
-  // Separate reservationSettings from establishment to pass flat establishment to ActivityDetail
-  const { reservationSettings, ...establishment } = activity.establishment
+  // Separate reservationSettings and resources from establishment to pass flat establishment to ActivityDetail
+  const { reservationSettings, reservationResources, ...establishment } = activity.establishment
 
   return (
     <>
@@ -91,6 +95,7 @@ export default async function ActivityPage({ params }: ActivityPageProps) {
         isAuthenticated={!!session}
         userId={session?.user?.id}
         reservationSettings={reservationSettings ?? null}
+        reservationResources={reservationResources}
       />
     </>
   )

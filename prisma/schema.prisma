@@ -342,6 +342,7 @@ model ReservationSettings {
   cancellationDeadlineHours Int     @default(24)
   confirmationMessage      String?  @db.Text
   cancellationPolicyText   String?  @db.Text
+  resourceSelectionMode    ResourceSelectionMode @default(HIDDEN)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -462,6 +463,13 @@ model ReservationResource {
 enum SlotSource {
   AUTO   // Généré depuis WeeklySchedule
   MANUAL // Créé manuellement par l'établissement
+}
+
+// Mode de sélection de salle côté client
+enum ResourceSelectionMode {
+  HIDDEN             // Client ne voit pas les salles ; auto-assign côté backend
+  PICK_RESOURCE_FIRST // Client choisit une salle, puis voit ses disponibilités
+  PICK_TIME_FIRST     // Client choisit un créneau, puis choisit parmi les salles dispo
 }
 
 // Créneau persisté (éditable par l'établissement)

@@ -90,6 +90,9 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
   // Settings form state
   const [enabled, setEnabled] = useState(initialSettings?.enabled ?? false)
   const [showExternalLinkAlso, setShowExternalLinkAlso] = useState(initialSettings?.showExternalLinkAlso ?? false)
+  const [resourceSelectionMode, setResourceSelectionMode] = useState<"HIDDEN" | "PICK_RESOURCE_FIRST" | "PICK_TIME_FIRST">(
+    (initialSettings as unknown as { resourceSelectionMode?: "HIDDEN" | "PICK_RESOURCE_FIRST" | "PICK_TIME_FIRST" })?.resourceSelectionMode ?? "HIDDEN"
+  )
   const [timezone, setTimezone] = useState(initialSettings?.timezone ?? "Europe/Paris")
   const [slotDuration, setSlotDuration] = useState(String(initialSettings?.slotDurationMinutes ?? 60))
   const [capacity, setCapacity] = useState(String(initialSettings?.capacityPerSlot ?? 10))
@@ -141,6 +144,7 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
     const result = await saveReservationSettings({
       enabled,
       showExternalLinkAlso,
+      resourceSelectionMode,
       timezone,
       slotDurationMinutes: parseInt(slotDuration),
       capacityPerSlot: parseInt(capacity),
@@ -300,6 +304,22 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
                 />
                 <span className="text-sm">Afficher aussi le lien de réservation externe (si configuré)</span>
               </label>
+              <div className="space-y-2 pt-2">
+                <Label>Mode de sélection de salle (côté client)</Label>
+                <Select value={resourceSelectionMode} onValueChange={(v) => setResourceSelectionMode(v as "HIDDEN" | "PICK_RESOURCE_FIRST" | "PICK_TIME_FIRST")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="HIDDEN">Automatique (client ne choisit pas)</SelectItem>
+                    <SelectItem value="PICK_RESOURCE_FIRST">Client choisit d&apos;abord la salle</SelectItem>
+                    <SelectItem value="PICK_TIME_FIRST">Client choisit d&apos;abord le créneau, puis la salle</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-400">
+                  {resourceSelectionMode === "HIDDEN" && "La salle est assignée automatiquement. Idéal pour les bowling, pistes identiques…"}
+                  {resourceSelectionMode === "PICK_RESOURCE_FIRST" && "Le client sélectionne d'abord une salle puis voit ses disponibilités. Idéal pour les escape games."}
+                  {resourceSelectionMode === "PICK_TIME_FIRST" && "Le client choisit un créneau puis sélectionne parmi les salles disponibles."}
+                </p>
+              </div>
             </CardContent>
           </Card>
 
