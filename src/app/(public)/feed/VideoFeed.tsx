@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { StreamHlsVideo } from "@/components/video/StreamHlsVideo"
 import { isHlsUrl } from "@/lib/video-utils"
+import { FavoriteButton } from "@/components/FavoriteButton"
 
 interface FeedVideo {
   id: string
@@ -50,7 +51,11 @@ interface FeedVideo {
   }
 }
 
-export function VideoFeed() {
+interface VideoFeedProps {
+  isAuthenticated?: boolean
+}
+
+export function VideoFeed({ isAuthenticated = false }: VideoFeedProps) {
   const router = useRouter()
   const [videos, setVideos] = useState<FeedVideo[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -368,33 +373,45 @@ export function VideoFeed() {
               className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 sm:p-6"
               style={{ paddingBottom: "1rem" }}
             >
-              <div className="max-w-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="secondary" className="bg-white/20 text-white border-0 text-xs">
-                    {video.establishment.name}
-                  </Badge>
-                  {video.videoCategory && (
-                    <Badge variant="outline" className="text-white border-white/30 text-xs">
-                      {video.videoCategory}
+              <div className="flex items-end justify-between gap-3">
+                <div className="max-w-lg flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="bg-white/20 text-white border-0 text-xs">
+                      {video.establishment.name}
                     </Badge>
-                  )}
+                    {video.videoCategory && (
+                      <Badge variant="outline" className="text-white border-white/30 text-xs">
+                        {video.videoCategory}
+                      </Badge>
+                    )}
+                  </div>
+                  <h3 className="text-white text-base sm:text-lg font-bold mb-1 line-clamp-2">
+                    {video.title || video.activity.title}
+                  </h3>
+                  <div className="flex items-center gap-2 text-white/80 text-sm">
+                    <MapPin className="h-3 w-3" />
+                    <span>{video.activity.city}</span>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-3 bg-white/20 text-white hover:bg-white/30 border-0"
+                    onClick={() => router.push(`/activite/${video.activity.id}`)}
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" />
+                    Voir l&apos;activite
+                  </Button>
                 </div>
-                <h3 className="text-white text-base sm:text-lg font-bold mb-1 line-clamp-2">
-                  {video.title || video.activity.title}
-                </h3>
-                <div className="flex items-center gap-2 text-white/80 text-sm">
-                  <MapPin className="h-3 w-3" />
-                  <span>{video.activity.city}</span>
+
+                {/* Bouton favoris — z-index correct, ne bloque pas le scroll */}
+                <div className="flex-shrink-0 pointer-events-auto">
+                  <FavoriteButton
+                    activityId={video.activity.id}
+                    isAuthenticated={isAuthenticated}
+                    size="md"
+                    className="bg-black/40 hover:bg-black/60 text-white hover:text-red-400 border-0 shadow-lg"
+                  />
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="mt-3 bg-white/20 text-white hover:bg-white/30 border-0"
-                  onClick={() => router.push(`/activite/${video.activity.id}`)}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  Voir l&apos;activite
-                </Button>
               </div>
             </div>
           </div>
