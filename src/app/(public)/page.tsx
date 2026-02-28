@@ -1,10 +1,14 @@
 import { prisma } from "@/lib/db"
 import { HomePageClient } from "./HomePageClient"
 import { backfillActivityTypes } from "@/app/actions/activity-types"
+import { auth } from "@/lib/auth"
 
 export default async function HomePage() {
   // Ensure all preconfigured + DB types exist in ActivityTypeConfig
   await backfillActivityTypes()
+
+  const session = await auth()
+  const isAuthenticated = !!session?.user?.id
 
   // Fetch site settings for hero media (video or image)
   let settings = null
@@ -40,6 +44,7 @@ export default async function HomePage() {
       heroImageDesktopUrl={settings?.heroImageDesktopUrl}
       heroImageMobileUrl={settings?.heroImageMobileUrl}
       activityTypeOptions={activityTypeOptions}
+      isAuthenticated={isAuthenticated}
     />
   )
 }

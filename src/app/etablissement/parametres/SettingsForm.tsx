@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { updateEstablishmentSettings } from "@/app/actions/establishment"
 import { toast } from "sonner"
-import { Globe, Calendar, Phone, Save } from "lucide-react"
+import { Globe, Calendar, Phone, Save, Accessibility } from "lucide-react"
 
 interface SettingsFormProps {
   establishment: {
@@ -18,8 +18,21 @@ interface SettingsFormProps {
     address: string | null
     city: string | null
     zipCode: string | null
+    accessWheelchair: boolean
+    accessToilets: boolean
+    accessParking: boolean
+    accessElevator: boolean
+    accessLevelEntry: boolean
   }
 }
+
+const ACCESSIBILITY_FIELDS = [
+  { name: "accessWheelchair" as const, label: "Accès fauteuil roulant (PMR)" },
+  { name: "accessToilets"    as const, label: "Toilettes accessibles PMR" },
+  { name: "accessParking"    as const, label: "Parking PMR disponible" },
+  { name: "accessElevator"   as const, label: "Ascenseur disponible" },
+  { name: "accessLevelEntry" as const, label: "Accès plain-pied (sans marches)" },
+]
 
 export function SettingsForm({ establishment }: SettingsFormProps) {
   const [isLoading, setIsLoading] = useState(false)
@@ -107,6 +120,36 @@ export function SettingsForm({ establishment }: SettingsFormProps) {
               disabled={isLoading}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ─── Accessibilité ───────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Accessibility className="h-5 w-5" />
+            Accessibilite
+          </CardTitle>
+          <CardDescription>
+            Indiquez les equipements accessibles dans votre etablissement
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {ACCESSIBILITY_FIELDS.map(({ name, label }) => (
+            <div key={name} className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id={name}
+                name={name}
+                defaultChecked={establishment[name]}
+                disabled={isLoading}
+                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+              />
+              <Label htmlFor={name} className="cursor-pointer font-normal">
+                {label}
+              </Label>
+            </div>
+          ))}
         </CardContent>
       </Card>
 

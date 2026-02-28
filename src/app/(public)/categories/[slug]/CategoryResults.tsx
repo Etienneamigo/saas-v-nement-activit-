@@ -10,6 +10,7 @@ import { geocodeCity } from "@/app/actions/search"
 import { ACTIVITY_TYPES, type ActivityTypeKey } from "@/lib/constants"
 import { formatDistance } from "@/lib/geo"
 import { MapPin, Clock, Euro, Users, Search, Navigation, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { FeedFavoriteButton } from "@/components/FeedFavoriteButton"
 
 // Normalize upload URLs
 function normalizeUploadUrl(url: string): string {
@@ -28,9 +29,11 @@ interface CategoryResultsProps {
     lng?: string
     radius?: string
   }
+  isAuthenticated?: boolean
+  initialFavoritedIds?: string[]
 }
 
-export function CategoryResults({ slug, label, searchParams }: CategoryResultsProps) {
+export function CategoryResults({ slug, label, searchParams, isAuthenticated = false, initialFavoritedIds = [] }: CategoryResultsProps) {
   const router = useRouter()
   const [activities, setActivities] = useState<ActivityWithDistance[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -189,7 +192,12 @@ export function CategoryResults({ slug, label, searchParams }: CategoryResultsPr
           </p>
           <div className="divide-y divide-gray-100">
             {activities.map((activity) => (
-              <ActivityCard key={activity.id} activity={activity} />
+              <ActivityCard
+                key={activity.id}
+                activity={activity}
+                isAuthenticated={isAuthenticated}
+                isFavorited={initialFavoritedIds.includes(activity.id)}
+              />
             ))}
           </div>
         </>
@@ -198,7 +206,7 @@ export function CategoryResults({ slug, label, searchParams }: CategoryResultsPr
   )
 }
 
-function ActivityCard({ activity }: { activity: ActivityWithDistance }) {
+function ActivityCard({ activity, isAuthenticated, isFavorited }: { activity: ActivityWithDistance; isAuthenticated: boolean; isFavorited: boolean }) {
   const typeInfo = ACTIVITY_TYPES[activity.type as ActivityTypeKey]
   const firstImage = activity.medias.find((m) => m.kind === "IMAGE")
 
@@ -263,8 +271,15 @@ function ActivityCard({ activity }: { activity: ActivityWithDistance }) {
           </div>
         </div>
 
-        {/* Arrow */}
-        <ChevronRight className="h-4 w-4 text-gray-300 mt-3 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+        {/* Favorite + Arrow */}
+        <div className="flex items-center gap-1 mt-2 flex-shrink-0">
+          <FeedFavoriteButton
+            activityId={activity.id}
+            initialFavorited={isFavorited}
+            isAuthenticated={isAuthenticated}
+          />
+          <ChevronRight className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
       </div>
     </Link>
   )

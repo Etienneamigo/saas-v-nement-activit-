@@ -22,6 +22,10 @@ import {
   Play,
   ChevronDown,
   BadgeCheck,
+  Accessibility,
+  ParkingSquare,
+  ArrowUpDown,
+  DoorOpen,
 } from "lucide-react"
 import type { Activity, Media, Establishment, Event, ReservationSettings, WeeklySchedule, ReservationCustomFieldDef } from "@prisma/client"
 import { EventsCarousel } from "./EventsCarousel"
@@ -355,6 +359,42 @@ export function ActivityDetail({
           </Button>
         </div>
       </div>
+
+      {/* Accessibilité */}
+      {(() => {
+        const est = activity.establishment as Establishment & {
+          accessWheelchair?: boolean
+          accessToilets?: boolean
+          accessParking?: boolean
+          accessElevator?: boolean
+          accessLevelEntry?: boolean
+        }
+        const badges = [
+          { key: "accessWheelchair", label: "Accessible PMR",         icon: <Accessibility className="h-3.5 w-3.5" /> },
+          { key: "accessToilets",    label: "Toilettes accessibles",   icon: <DoorOpen className="h-3.5 w-3.5" /> },
+          { key: "accessParking",    label: "Parking PMR",             icon: <ParkingSquare className="h-3.5 w-3.5" /> },
+          { key: "accessElevator",   label: "Ascenseur",               icon: <ArrowUpDown className="h-3.5 w-3.5" /> },
+          { key: "accessLevelEntry", label: "Accès plain-pied",        icon: <DoorOpen className="h-3.5 w-3.5" /> },
+        ] as const
+        const activeBadges = badges.filter(({ key }) => est[key])
+        if (activeBadges.length === 0) return null
+        return (
+          <div className="mb-10">
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">Accessibilité</h2>
+            <div className="flex flex-wrap gap-2">
+              {activeBadges.map(({ key, label, icon }) => (
+                <span
+                  key={key}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full"
+                >
+                  {icon}
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Établissement */}
       <div className="mb-10 p-5 bg-gray-50 rounded-xl">

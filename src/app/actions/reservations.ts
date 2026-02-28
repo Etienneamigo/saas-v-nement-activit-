@@ -46,9 +46,17 @@ const reservationSettingsSchema = z.object({
   customFieldDefs: z.array(customFieldDefSchema).default([]),
 })
 
+// Accepte un ISO string OU un objet Date (sérialisation server action Next.js)
+const dateOrIsoString = z
+  .union([
+    z.string().datetime(),
+    z.date(),
+  ])
+  .transform((v) => (v instanceof Date ? v.toISOString() : v))
+
 const createReservationSchema = z.object({
   establishmentId: z.string().cuid(),
-  startAt: z.string().datetime(),
+  startAt: dateOrIsoString,
   partySize: z.number().int().min(1),
   customerName: z.string().min(1, "Nom requis"),
   customerEmail: z.string().email("Email invalide"),

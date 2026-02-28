@@ -8,6 +8,12 @@ const updateSettingsSchema = z.object({
   website: z.string().url().optional().or(z.literal("")),
   bookingUrl: z.string().url().optional().or(z.literal("")),
   phone: z.string().optional(),
+  // Accessibilité
+  accessWheelchair: z.boolean().default(false),
+  accessToilets: z.boolean().default(false),
+  accessParking: z.boolean().default(false),
+  accessElevator: z.boolean().default(false),
+  accessLevelEntry: z.boolean().default(false),
 })
 
 export async function updateEstablishmentSettings(formData: FormData) {
@@ -22,6 +28,12 @@ export async function updateEstablishmentSettings(formData: FormData) {
       website: formData.get("website") as string || "",
       bookingUrl: formData.get("bookingUrl") as string || "",
       phone: formData.get("phone") as string || "",
+      // Les checkboxes HTML ne sont présentes dans FormData que si cochées
+      accessWheelchair: formData.get("accessWheelchair") === "on",
+      accessToilets: formData.get("accessToilets") === "on",
+      accessParking: formData.get("accessParking") === "on",
+      accessElevator: formData.get("accessElevator") === "on",
+      accessLevelEntry: formData.get("accessLevelEntry") === "on",
     }
 
     const parsed = updateSettingsSchema.safeParse(rawData)
@@ -29,7 +41,7 @@ export async function updateEstablishmentSettings(formData: FormData) {
       return { error: parsed.error.issues[0].message }
     }
 
-    const { website, bookingUrl, phone } = parsed.data
+    const { website, bookingUrl, phone, ...accessibility } = parsed.data
 
     await prisma.establishment.update({
       where: { id: session.user.establishmentId },
@@ -37,6 +49,7 @@ export async function updateEstablishmentSettings(formData: FormData) {
         website: website || null,
         bookingUrl: bookingUrl || null,
         phone: phone || null,
+        ...accessibility,
       },
     })
 
@@ -65,6 +78,11 @@ export async function getEstablishmentSettings() {
         address: true,
         city: true,
         zipCode: true,
+        accessWheelchair: true,
+        accessToilets: true,
+        accessParking: true,
+        accessElevator: true,
+        accessLevelEntry: true,
       },
     })
 

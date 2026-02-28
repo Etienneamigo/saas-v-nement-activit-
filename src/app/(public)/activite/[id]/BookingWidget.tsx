@@ -45,6 +45,16 @@ function getTodayStr() {
   return new Date().toISOString().split("T")[0]
 }
 
+/**
+ * Normalise une valeur Date ou string en ISO string.
+ * Les server actions Next.js désérialisent les Date côté client en objets Date,
+ * même si le type TypeScript déclare string.
+ */
+function normalizeDateInput(value: Date | string): string {
+  if (value instanceof Date) return value.toISOString()
+  return value
+}
+
 function getMaxDateStr(windowDays: number) {
   const d = new Date()
   d.setDate(d.getDate() + windowDays)
@@ -85,7 +95,7 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
     setSubmitting(true)
     const result = await createReservation({
       establishmentId,
-      startAt: selectedSlot.startAt,
+      startAt: normalizeDateInput(selectedSlot.startAt as unknown as Date | string),
       partySize,
       customerName,
       customerEmail,
