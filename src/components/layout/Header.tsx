@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { logoutAction } from "@/app/actions/auth"
-import { User, LogOut, Building2, Heart, Shield, CreditCard, Settings, CalendarCheck } from "lucide-react"
+import { User, LogOut, Building2, Heart, Shield, CreditCard, Settings, CalendarCheck, LogIn } from "lucide-react"
 
 export function Header() {
   const { data: session, status } = useSession()
@@ -35,11 +35,31 @@ export function Header() {
           <span className="font-bold text-xl tracking-tight">WADELO</span>
         </Link>
 
-        {/* Mobile: logo centered — use flex trick with invisible spacers */}
-        <div className="flex md:hidden items-center justify-center flex-1">
+        {/* Mobile: logo + reservation shortcut */}
+        <div className="flex md:hidden items-center justify-between flex-1">
+          <div className="w-10" /> {/* Spacer */}
           <Link href="/">
             <span className="font-bold text-xl tracking-tight">WADELO</span>
           </Link>
+          <div className="w-10 flex justify-end">
+            {session?.user?.role === "USER" ? (
+              <Link
+                href="/profil/reservations"
+                className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 transition-colors"
+                title="Mes réservations"
+              >
+                <CalendarCheck className="h-4.5 w-4.5 text-gray-600" />
+              </Link>
+            ) : !session ? (
+              <Link
+                href="/auth/connexion"
+                className="flex items-center justify-center h-8 w-8 rounded-full hover:bg-gray-100 transition-colors"
+                title="Connexion"
+              >
+                <LogIn className="h-4.5 w-4.5 text-gray-600" />
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         {/* Desktop nav */}

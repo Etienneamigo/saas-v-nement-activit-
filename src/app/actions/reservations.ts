@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { getAvailableSlots, getAvailableResourcesForSlot } from "@/lib/availability"
+import { getEffectiveRules } from "@/lib/resource-rules"
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import {
@@ -288,9 +289,19 @@ export async function createReservation(data: unknown) {
     return { error: "Les réservations ne sont pas disponibles pour cet établissement" }
   }
 
-  // Vérifier partySize bounds
-  if (partySize < settings.minPartySize || partySize > settings.maxPartySize) {
-    return { error: `La taille du groupe doit être entre ${settings.minPartySize} et ${settings.maxPartySize}` }
+  // Load resource if specified, to compute effective rules
+  let resource: { useCustomRules: boolean; minPartySizeOverride: number | null; maxPartySizeOverride: number | null; slotDurationMinutesOverride: number | null; bookingWindowDaysOverride: number | null } | null = null
+  if (resourceId) {
+    resource = await prisma.reservationResource.findUnique({
+      where: { id: resourceId },
+      select: { useCustomRules: true, minPartySizeOverride: true, maxPartySizeOverride: true, slotDurationMinutesOverride: true, bookingWindowDaysOverride: true },
+    })
+  }
+  const effectiveRules = getEffectiveRules(resource, settings)
+
+  // Vérifier partySize bounds (using effective rules for resource)
+  if (partySize < effectiveRules.minPartySize || partySize > effectiveRules.maxPartySize) {
+    return { error: `La taille du groupe doit être entre ${effectiveRules.minPartySize} et ${effectiveRules.maxPartySize}` }
   }
 
   // Vérifier minNotice
@@ -300,7 +311,14 @@ export async function createReservation(data: unknown) {
     return { error: "Ce créneau est trop proche. Veuillez choisir un autre horaire." }
   }
 
-  const endAt = new Date(startAt.getTime() + settings.slotDurationMinutes * 60 * 1000)
+  // Vérifier booking window (using effective rules)
+  const maxBookingDate = new Date(now)
+  maxBookingDate.setDate(maxBookingDate.getDate() + effectiveRules.bookingWindowDays)
+  if (startAt > maxBookingDate) {
+    return { error: "Ce créneau dépasse la fenêtre de réservation autorisée." }
+  }
+
+  const endAt = new Date(startAt.getTime() + effectiveRules.slotDurationMinutes * 60 * 1000)
 
   // Vérifier les champs obligatoires
   const requiredFields = settings.customFieldDefs.filter((f) => f.required)

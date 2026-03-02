@@ -442,13 +442,20 @@ model ReservationCustomFieldValue {
   @@unique([reservationId, fieldDefId])
 }
 
-// Ressource réservable (ex: salle d'escape game)
+// Ressource réservable (ex: salle d'escape game, piste, terrain…)
 model ReservationResource {
   id              String   @id @default(cuid())
   establishmentId String
-  name            String   // ex: "Salle A"
+  name            String   // ex: "Salle A", "Piste 3", "Terrain B"
   capacity        Int
   isActive        Boolean  @default(true)
+  description     String?  @db.Text
+  imageUrl        String?  @db.Text
+  useCustomRules  Boolean  @default(false)   // false = hérite des paramètres globaux
+  minPartySizeOverride       Int?   // Override minPartySize (null = hérite)
+  maxPartySizeOverride       Int?   // Override maxPartySize
+  slotDurationMinutesOverride Int?  // Override slotDurationMinutes
+  bookingWindowDaysOverride   Int?  // Override bookingWindowDays
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

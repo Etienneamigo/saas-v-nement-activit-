@@ -7,7 +7,7 @@ import {
   Home,
   Play,
   Search,
-  Heart,
+  CalendarCheck,
   User,
   Building2,
   Shield,
@@ -44,7 +44,7 @@ function getNavItems(role?: string, isAuthenticated?: boolean): NavItem[] {
         { href: "/", label: "Accueil", icon: <Home className={iconClass} /> },
         { href: "/feed", label: "Feed", icon: <Play className={iconClass} /> },
         { href: "/recherche", label: "Recherche", icon: <Search className={iconClass} /> },
-        { href: "/favoris", label: "Favoris", icon: <Heart className={iconClass} /> },
+        { href: isAuthenticated ? "/profil/reservations" : "/auth/connexion", label: "Réservations", icon: <CalendarCheck className={iconClass} /> },
         { href: isAuthenticated ? "/compte" : "/auth/connexion", label: "Compte", icon: <User className={iconClass} /> },
       ]
   }

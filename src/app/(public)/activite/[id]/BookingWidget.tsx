@@ -75,6 +75,25 @@ function getMaxDateStr(windowDays: number) {
   return d.toISOString().split("T")[0]
 }
 
+function computeEffectiveRules(
+  resource: ReservationResource | null | undefined,
+  settings: SettingsWithRelations
+) {
+  if (!resource || !(resource as Record<string, unknown>).useCustomRules) {
+    return {
+      minPartySize: settings.minPartySize,
+      maxPartySize: settings.maxPartySize,
+      bookingWindowDays: settings.bookingWindowDays,
+    }
+  }
+  const r = resource as Record<string, unknown>
+  return {
+    minPartySize: (r.minPartySizeOverride as number) ?? settings.minPartySize,
+    maxPartySize: (r.maxPartySizeOverride as number) ?? settings.maxPartySize,
+    bookingWindowDays: (r.bookingWindowDaysOverride as number) ?? settings.bookingWindowDays,
+  }
+}
+
 export function BookingWidget({ establishmentId, settings, resources = [], isAuthenticated }: BookingWidgetProps) {
   const resourceMode: ResourceMode =
     (settings as unknown as { resourceSelectionMode?: ResourceMode }).resourceSelectionMode ?? "HIDDEN"
@@ -87,6 +106,11 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
   const [availableRooms, setAvailableRooms] = useState<ResourceOption[]>([])
   const [loadingRooms, setLoadingRooms] = useState(false)
+
+  // Compute effective rules based on selected resource
+  const selectedResource = resources.find((r) => r.id === selectedResourceId) ?? null
+  const effectiveRules = computeEffectiveRules(selectedResource, settings)
+
   const [partySize, setPartySize] = useState(settings.minPartySize)
   const [submitting, setSubmitting] = useState(false)
   const [confirmedReservation, setConfirmedReservation] = useState<{
@@ -228,9 +252,9 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
       {/* ── STEP: Resource (PICK_RESOURCE_FIRST) ──────────────────────────── */}
       {step === "resource" && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">Choisissez une salle :</p>
+          <p className="text-sm text-gray-600">Choisissez une ressource :</p>
           {resources.length === 0 ? (
-            <p className="text-sm text-gray-400">Aucune salle disponible.</p>
+            <p className="text-sm text-gray-400">Aucune ressource disponible.</p>
           ) : (
             <div className="grid grid-cols-1 gap-2">
               {resources.map((r) => (
@@ -263,7 +287,7 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
               className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
-              {resources.find((r) => r.id === selectedResourceId)?.name ?? "Salle"}
+              {resources.find((r) => r.id === selectedResourceId)?.name ?? "Ressource"}
             </button>
           )}
           <div className="space-y-1.5">
@@ -271,7 +295,7 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
             <input
               type="date"
               min={getTodayStr()}
-              max={getMaxDateStr(settings.bookingWindowDays)}
+              max={getMaxDateStr(effectiveRules.bookingWindowDays)}
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-400"
@@ -306,7 +330,7 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
               <button
                 type="button"
                 className="w-7 h-7 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center text-sm"
-                onClick={() => setPartySize((p) => Math.max(settings.minPartySize, p - 1))}
+                onClick={() => setPartySize((p) => Math.max(effectiveRules.minPartySize, p - 1))}
               >
                 −
               </button>
@@ -314,7 +338,7 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
               <button
                 type="button"
                 className="w-7 h-7 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center justify-center text-sm"
-                onClick={() => setPartySize((p) => Math.min(settings.maxPartySize, p + 1))}
+                onClick={() => setPartySize((p) => Math.min(effectiveRules.maxPartySize, p + 1))}
               >
                 +
               </button>
@@ -375,15 +399,15 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
             <ChevronLeft className="h-3.5 w-3.5" />
             {formatTime(selectedSlot.startAt)} · {partySize} pers.
           </button>
-          <p className="text-sm text-gray-600">Choisissez une salle pour ce créneau :</p>
+          <p className="text-sm text-gray-600">Choisissez une ressource pour ce créneau :</p>
           {loadingRooms ? (
             <div className="flex items-center justify-center py-6 text-gray-400">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
-              Chargement des salles…
+              Chargement des ressources…
             </div>
           ) : availableRooms.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-4">
-              Aucune salle disponible pour ce créneau
+              Aucune ressource disponible pour ce créneau
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-2">
