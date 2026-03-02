@@ -28,6 +28,8 @@ interface ResourceOption {
   id: string
   name: string
   remainingCapacity: number
+  description?: string | null
+  imageUrl?: string | null
 }
 
 interface BookingWidgetProps {
@@ -257,22 +259,39 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
             <p className="text-sm text-gray-400">Aucune ressource disponible.</p>
           ) : (
             <div className="grid grid-cols-1 gap-2">
-              {resources.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => {
-                    setSelectedResourceId(r.id)
-                    setStep("date")
-                  }}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-900 hover:bg-gray-50 text-left transition-colors"
-                >
-                  <Warehouse className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{r.name}</p>
-                    <p className="text-xs text-gray-400">Capacité : {r.capacity}</p>
-                  </div>
-                </button>
-              ))}
+              {resources.map((r) => {
+                const imgUrl = (r as unknown as { imageUrl?: string | null }).imageUrl
+                const desc = (r as unknown as { description?: string | null }).description
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      setSelectedResourceId(r.id)
+                      setStep("date")
+                    }}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-900 hover:bg-gray-50 text-left transition-colors"
+                  >
+                    {imgUrl ? (
+                      <img
+                        src={imgUrl.startsWith("/uploads/") ? imgUrl.replace("/uploads/", "/api/uploads/") : imgUrl}
+                        alt={r.name}
+                        className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <Warehouse className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900">{r.name}</p>
+                        <span className="text-xs text-gray-400">{r.capacity} pl.</span>
+                      </div>
+                      {desc && (
+                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{desc}</p>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
@@ -420,12 +439,23 @@ export function BookingWidget({ establishmentId, settings, resources = [], isAut
                   }}
                   className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-900 hover:bg-gray-50 text-left transition-colors"
                 >
-                  <Warehouse className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                  <div>
+                  {room.imageUrl ? (
+                    <img
+                      src={room.imageUrl.startsWith("/uploads/") ? room.imageUrl.replace("/uploads/", "/api/uploads/") : room.imageUrl}
+                      alt={room.name}
+                      className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <Warehouse className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900">{room.name}</p>
                     <p className="text-xs text-gray-400">
                       {room.remainingCapacity} place{room.remainingCapacity > 1 ? "s" : ""} restante{room.remainingCapacity > 1 ? "s" : ""}
                     </p>
+                    {room.description && (
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{room.description}</p>
+                    )}
                   </div>
                 </button>
               ))}

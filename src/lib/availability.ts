@@ -345,7 +345,7 @@ export async function getAvailableResourcesForSlot(
   establishmentId: string,
   startAt: Date,
   partySize: number = 1
-): Promise<Array<{ id: string; name: string; remainingCapacity: number }>> {
+): Promise<Array<{ id: string; name: string; remainingCapacity: number; description: string | null; imageUrl: string | null }>> {
   // Load settings for defaults
   const settings = await prisma.reservationSettings.findUnique({
     where: { establishmentId },
@@ -397,6 +397,8 @@ export async function getAvailableResourcesForSlot(
       id: slot.resourceId!,
       name: slot.resource?.name ?? "Ressource",
       remainingCapacity: slot.capacity - (bookedMap.get(slot.id) ?? 0),
+      description: slot.resource?.description ?? null,
+      imageUrl: slot.resource?.imageUrl ?? null,
     }))
 }
 

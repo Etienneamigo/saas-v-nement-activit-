@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { toast } from "sonner"
 import { createResource, updateResource, deleteResource } from "@/app/actions/slots"
 import { saveReservationSettings } from "@/app/actions/reservations"
@@ -15,7 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Trash2, Edit3, Loader2, ToggleLeft, ToggleRight, Warehouse, Save, Settings2 } from "lucide-react"
+import { Plus, Trash2, Edit3, Loader2, ToggleLeft, ToggleRight, Warehouse, Save, Settings2, Upload, X, ImageIcon } from "lucide-react"
+import { safeParseInt } from "@/lib/parse-utils"
+
+/** Sentinel value for "use default" in Select (Radix does not support value="") */
+const SELECT_DEFAULT = "__default__"
 
 type Resource = {
   id: string
@@ -70,6 +74,8 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
   const [formMaxParty, setFormMaxParty] = useState("")
   const [formSlotDuration, setFormSlotDuration] = useState("")
   const [formBookingWindow, setFormBookingWindow] = useState("")
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   function resetForm() {
     setFormName("")
@@ -81,6 +87,56 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
     setFormMaxParty("")
     setFormSlotDuration("")
     setFormBookingWindow("")
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploadingImage(true)
+    try {
+      // Try Cloudflare Images first, fallback to local upload
+      const duRes = await fetch("/api/cloudflare/images/direct-upload", { method: "POST" })
+      const duData = await duRes.json()
+
+      if (duRes.ok) {
+        // Cloudflare path
+        const uploadForm = new FormData()
+        uploadForm.append("file", file)
+        const uploadRes = await fetch(duData.uploadURL, { method: "POST", body: uploadForm })
+        if (!uploadRes.ok) {
+          toast.error("Erreur lors de l'upload de l'image")
+          setIsUploadingImage(false)
+          return
+        }
+        // Build Cloudflare delivery URL
+        const cfResult = await uploadRes.json()
+        const variants = cfResult?.result?.variants
+        const url = Array.isArray(variants) && variants.length > 0 ? variants[0] : null
+        if (url) {
+          setFormImageUrl(url)
+          toast.success("Image uploadée")
+        } else {
+          toast.error("Erreur: pas d'URL retournée par Cloudflare")
+        }
+      } else {
+        // Local fallback
+        const formData = new FormData()
+        formData.append("file", file)
+        const response = await fetch("/api/upload", { method: "POST", body: formData })
+        const data = await response.json()
+        if (!response.ok) {
+          toast.error(data.error || "Erreur lors de l'upload")
+        } else {
+          setFormImageUrl(data.url)
+          toast.success("Image uploadée")
+        }
+      }
+    } catch {
+      toast.error("Erreur lors de l'upload de l'image")
+    }
+    setIsUploadingImage(false)
+    if (imageInputRef.current) imageInputRef.current.value = ""
   }
 
   function openCreate() {
@@ -106,11 +162,11 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
   async function handleSaveDefaults() {
     setSavingDefaults(true)
     const rules = {
-      slotDurationMinutes: parseInt(defSlotDuration),
-      capacityPerSlot: parseInt(defCapacity),
-      minPartySize: parseInt(defMinParty),
-      maxPartySize: parseInt(defMaxParty),
-      bookingWindowDays: parseInt(defBookingWindow),
+      slotDurationMinutes: safeParseInt(defSlotDuration) ?? defaultRules.slotDurationMinutes,
+      capacityPerSlot: safeParseInt(defCapacity) ?? defaultRules.capacityPerSlot,
+      minPartySize: safeParseInt(defMinParty) ?? defaultRules.minPartySize,
+      maxPartySize: safeParseInt(defMaxParty) ?? defaultRules.maxPartySize,
+      bookingWindowDays: safeParseInt(defBookingWindow) ?? defaultRules.bookingWindowDays,
     }
     onDefaultRulesChange?.(rules)
     toast.success("Pensez à enregistrer dans l'onglet Paramètres pour persister ces changements")
@@ -121,17 +177,18 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
     if (!formName.trim()) return toast.error("Nom requis")
     setSaving(true)
 
+    const slotDurationValue = formSlotDuration === SELECT_DEFAULT ? "" : formSlotDuration
     const data = {
       name: formName.trim(),
-      capacity: parseInt(formCapacity),
+      capacity: safeParseInt(formCapacity) ?? 1,
       isActive: true,
       description: formDescription.trim() || null,
       imageUrl: formImageUrl.trim() || null,
       useCustomRules: formUseCustomRules,
-      minPartySizeOverride: formUseCustomRules && formMinParty ? parseInt(formMinParty) : null,
-      maxPartySizeOverride: formUseCustomRules && formMaxParty ? parseInt(formMaxParty) : null,
-      slotDurationMinutesOverride: formUseCustomRules && formSlotDuration ? parseInt(formSlotDuration) : null,
-      bookingWindowDaysOverride: formUseCustomRules && formBookingWindow ? parseInt(formBookingWindow) : null,
+      minPartySizeOverride: formUseCustomRules ? (safeParseInt(formMinParty) ?? null) : null,
+      maxPartySizeOverride: formUseCustomRules ? (safeParseInt(formMaxParty) ?? null) : null,
+      slotDurationMinutesOverride: formUseCustomRules ? (safeParseInt(slotDurationValue) ?? null) : null,
+      bookingWindowDaysOverride: formUseCustomRules ? (safeParseInt(formBookingWindow) ?? null) : null,
     }
 
     let result
@@ -306,13 +363,65 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
               className="w-full border border-gray-200 rounded text-sm p-2 min-h-[60px] focus:outline-none focus:border-gray-400 bg-white"
             />
           </div>
+          {/* Image upload */}
           <div className="space-y-1">
-            <Label className="text-xs">URL de l&apos;image</Label>
-            <Input
-              value={formImageUrl}
-              onChange={(e) => setFormImageUrl(e.target.value)}
-              placeholder="https://…"
-              className="h-8 text-sm"
+            <Label className="text-xs">Image</Label>
+            {formImageUrl ? (
+              <div className="flex items-center gap-3">
+                <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                  <img
+                    src={formImageUrl.startsWith("/uploads/") ? formImageUrl.replace("/uploads/", "/api/uploads/") : formImageUrl}
+                    alt="Aperçu"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="h-7 text-xs"
+                  >
+                    {isUploadingImage ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                    Remplacer
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setFormImageUrl("")}
+                    className="h-7 text-xs text-red-500 hover:text-red-600"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Supprimer
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={isUploadingImage}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg py-4 flex flex-col items-center gap-1 hover:border-gray-400 transition-colors cursor-pointer"
+              >
+                {isUploadingImage ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                ) : (
+                  <ImageIcon className="h-5 w-5 text-gray-400" />
+                )}
+                <span className="text-xs text-gray-400">
+                  {isUploadingImage ? "Upload en cours…" : "Cliquez pour uploader une image"}
+                </span>
+              </button>
+            )}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handleImageUpload}
             />
           </div>
 
@@ -339,10 +448,10 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
               <div className="grid grid-cols-2 gap-3 p-3 border border-blue-100 rounded-lg bg-blue-50/50">
                 <div className="space-y-1">
                   <Label className="text-xs">Durée créneau (min)</Label>
-                  <Select value={formSlotDuration || ""} onValueChange={setFormSlotDuration}>
+                  <Select value={formSlotDuration || SELECT_DEFAULT} onValueChange={(v) => setFormSlotDuration(v === SELECT_DEFAULT ? "" : v)}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={`Par défaut (${defSlotDuration})`} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Par défaut ({defSlotDuration} min)</SelectItem>
+                      <SelectItem value={SELECT_DEFAULT}>Par défaut ({defSlotDuration} min)</SelectItem>
                       {[15, 30, 45, 60, 90, 120, 180, 240].map((v) => (
                         <SelectItem key={v} value={String(v)}>{v} min</SelectItem>
                       ))}
