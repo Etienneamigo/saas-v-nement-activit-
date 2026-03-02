@@ -4,10 +4,10 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getAvailability, createReservation } from "@/app/actions/reservations"
+import { getAvailability, createReservation, getResourcesForSlot } from "@/app/actions/reservations"
 import { toast } from "sonner"
-import { CalendarCheck, ChevronLeft, Clock, Users, CheckCircle2, Loader2 } from "lucide-react"
-import type { ReservationSettings, WeeklySchedule, ReservationCustomFieldDef } from "@prisma/client"
+import { CalendarCheck, ChevronLeft, Clock, Users, CheckCircle2, Loader2, Warehouse } from "lucide-react"
+import type { ReservationSettings, WeeklySchedule, ReservationCustomFieldDef, ReservationResource } from "@prisma/client"
 
 type SettingsWithRelations = ReservationSettings & {
   weeklySchedule: WeeklySchedule[]
@@ -19,15 +19,34 @@ interface SlotInfo {
   endAt: string
   remainingCapacity: number
   isAvailable: boolean
+  slotId?: string
+  resourceId?: string
+  resourceName?: string
+}
+
+interface ResourceOption {
+  id: string
+  name: string
+  remainingCapacity: number
 }
 
 interface BookingWidgetProps {
   establishmentId: string
   settings: SettingsWithRelations
+  resources?: ReservationResource[]
   isAuthenticated: boolean
 }
 
-type Step = "date" | "slot" | "form" | "confirmed"
+// resourceSelectionMode peut ne pas exister encore (DB non migrée) → fallback HIDDEN
+type ResourceMode = "HIDDEN" | "PICK_RESOURCE_FIRST" | "PICK_TIME_FIRST"
+
+type Step =
+  | "resource"   // PICK_RESOURCE_FIRST : choisir une salle en premier
+  | "date"
+  | "slot"
+  | "room"       // PICK_TIME_FIRST : choisir la salle après le créneau
+  | "form"
+  | "confirmed"
 
 function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
@@ -45,11 +64,6 @@ function getTodayStr() {
   return new Date().toISOString().split("T")[0]
 }
 
-/**
- * Normalise une valeur Date ou string en ISO string.
- * Les server actions Next.js désérialisent les Date côté client en objets Date,
- * même si le type TypeScript déclare string.
- */
 function normalizeDateInput(value: Date | string): string {
   if (value instanceof Date) return value.toISOString()
   return value
@@ -61,15 +75,25 @@ function getMaxDateStr(windowDays: number) {
   return d.toISOString().split("T")[0]
 }
 
-export function BookingWidget({ establishmentId, settings, isAuthenticated }: BookingWidgetProps) {
-  const [step, setStep] = useState<Step>("date")
+export function BookingWidget({ establishmentId, settings, resources = [], isAuthenticated }: BookingWidgetProps) {
+  const resourceMode: ResourceMode =
+    (settings as unknown as { resourceSelectionMode?: ResourceMode }).resourceSelectionMode ?? "HIDDEN"
+
+  const [step, setStep] = useState<Step>(resourceMode === "PICK_RESOURCE_FIRST" ? "resource" : "date")
   const [selectedDate, setSelectedDate] = useState("")
   const [slots, setSlots] = useState<SlotInfo[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<SlotInfo | null>(null)
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null)
+  const [availableRooms, setAvailableRooms] = useState<ResourceOption[]>([])
+  const [loadingRooms, setLoadingRooms] = useState(false)
   const [partySize, setPartySize] = useState(settings.minPartySize)
   const [submitting, setSubmitting] = useState(false)
-  const [confirmedReservation, setConfirmedReservation] = useState<{ id: string; startAt: string; partySize: number } | null>(null)
+  const [confirmedReservation, setConfirmedReservation] = useState<{
+    id: string
+    startAt: string
+    partySize: number
+  } | null>(null)
 
   // Form fields
   const [customerName, setCustomerName] = useState("")
@@ -77,16 +101,37 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
   const [customerPhone, setCustomerPhone] = useState("")
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({})
 
+  // Fetch slots when entering the "slot" step
   useEffect(() => {
-    if (!selectedDate) return
+    if (!selectedDate || step !== "slot") return
     setLoadingSlots(true)
     setSlots([])
     setSelectedSlot(null)
-    getAvailability(establishmentId, selectedDate).then((result) => {
+    getAvailability(
+      establishmentId,
+      selectedDate,
+      resourceMode === "PICK_RESOURCE_FIRST" ? selectedResourceId : null
+    ).then((result) => {
       setSlots((result.slots ?? []) as SlotInfo[])
       setLoadingSlots(false)
     })
-  }, [selectedDate, establishmentId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, step])
+
+  // Fetch available rooms when entering the "room" step (PICK_TIME_FIRST)
+  useEffect(() => {
+    if (resourceMode !== "PICK_TIME_FIRST" || !selectedSlot || step !== "room") return
+    setLoadingRooms(true)
+    getResourcesForSlot(
+      establishmentId,
+      normalizeDateInput(selectedSlot.startAt as unknown as Date | string),
+      partySize
+    ).then((result) => {
+      setAvailableRooms(result.resources ?? [])
+      setLoadingRooms(false)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSlot, step])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -101,16 +146,21 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
       customerEmail,
       customerPhone: customerPhone || undefined,
       customFieldValues,
+      slotId: selectedSlot.slotId ?? null,
+      resourceId: selectedResourceId ?? selectedSlot.resourceId ?? null,
     })
     setSubmitting(false)
 
     if (result.error) {
       toast.error(result.error)
       if (result.error.includes("complet")) {
-        // Refresh slots
         setStep("slot")
         setLoadingSlots(true)
-        getAvailability(establishmentId, selectedDate).then((r) => {
+        getAvailability(
+          establishmentId,
+          selectedDate,
+          resourceMode === "PICK_RESOURCE_FIRST" ? selectedResourceId : null
+        ).then((r) => {
           setSlots((r.slots ?? []) as SlotInfo[])
           setLoadingSlots(false)
         })
@@ -125,6 +175,20 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
     }
   }
 
+  function resetWidget() {
+    setStep(resourceMode === "PICK_RESOURCE_FIRST" ? "resource" : "date")
+    setSelectedDate("")
+    setSelectedSlot(null)
+    setSelectedResourceId(null)
+    setAvailableRooms([])
+    setCustomerName("")
+    setCustomerEmail("")
+    setCustomerPhone("")
+    setCustomFieldValues({})
+    setConfirmedReservation(null)
+  }
+
+  // ── CONFIRMED ──────────────────────────────────────────────────────────────
   if (step === "confirmed" && confirmedReservation) {
     return (
       <div className="border border-green-200 bg-green-50 rounded-xl p-5 space-y-3">
@@ -141,21 +205,7 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
             {settings.confirmationMessage}
           </p>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-green-300 text-green-700"
-          onClick={() => {
-            setStep("date")
-            setSelectedDate("")
-            setSelectedSlot(null)
-            setCustomerName("")
-            setCustomerEmail("")
-            setCustomerPhone("")
-            setCustomFieldValues({})
-            setConfirmedReservation(null)
-          }}
-        >
+        <Button variant="outline" size="sm" className="border-green-300 text-green-700" onClick={resetWidget}>
           Nouvelle réservation
         </Button>
       </div>
@@ -169,16 +219,53 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
         Réserver
       </h3>
 
-      {/* Politique d'annulation */}
       {settings.cancellationPolicyText && (
         <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
           {settings.cancellationPolicyText}
         </p>
       )}
 
-      {/* ── STEP: Date ─────────────────────────────────────────────────────── */}
+      {/* ── STEP: Resource (PICK_RESOURCE_FIRST) ──────────────────────────── */}
+      {step === "resource" && (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">Choisissez une salle :</p>
+          {resources.length === 0 ? (
+            <p className="text-sm text-gray-400">Aucune salle disponible.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2">
+              {resources.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => {
+                    setSelectedResourceId(r.id)
+                    setStep("date")
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-900 hover:bg-gray-50 text-left transition-colors"
+                >
+                  <Warehouse className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{r.name}</p>
+                    <p className="text-xs text-gray-400">Capacité : {r.capacity}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── STEP: Date ──────────────────────────────────────────────────────── */}
       {step === "date" && (
         <div className="space-y-3">
+          {resourceMode === "PICK_RESOURCE_FIRST" && selectedResourceId && (
+            <button
+              onClick={() => setStep("resource")}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              {resources.find((r) => r.id === selectedResourceId)?.name ?? "Salle"}
+            </button>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-500">Choisissez une date</Label>
             <input
@@ -200,7 +287,7 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
         </div>
       )}
 
-      {/* ── STEP: Slot ─────────────────────────────────────────────────────── */}
+      {/* ── STEP: Slot ──────────────────────────────────────────────────────── */}
       {step === "slot" && (
         <div className="space-y-3">
           <button
@@ -249,11 +336,15 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
                 const available = slot.isAvailable && slot.remainingCapacity >= partySize
                 return (
                   <button
-                    key={slot.startAt}
+                    key={`${slot.startAt}-${slot.resourceId ?? "global"}`}
                     disabled={!available}
                     onClick={() => {
                       setSelectedSlot(slot)
-                      setStep("form")
+                      if (resourceMode === "PICK_TIME_FIRST") {
+                        setStep("room")
+                      } else {
+                        setStep("form")
+                      }
                     }}
                     className={`flex flex-col items-center py-2 px-1 rounded-lg border text-sm transition-colors ${
                       available
@@ -274,12 +365,63 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
         </div>
       )}
 
+      {/* ── STEP: Room (PICK_TIME_FIRST) ────────────────────────────────────── */}
+      {step === "room" && selectedSlot && (
+        <div className="space-y-3">
+          <button
+            onClick={() => setStep("slot")}
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            {formatTime(selectedSlot.startAt)} · {partySize} pers.
+          </button>
+          <p className="text-sm text-gray-600">Choisissez une salle pour ce créneau :</p>
+          {loadingRooms ? (
+            <div className="flex items-center justify-center py-6 text-gray-400">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              Chargement des salles…
+            </div>
+          ) : availableRooms.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">
+              Aucune salle disponible pour ce créneau
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2">
+              {availableRooms.map((room) => (
+                <button
+                  key={room.id}
+                  onClick={() => {
+                    setSelectedResourceId(room.id)
+                    setStep("form")
+                  }}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-900 hover:bg-gray-50 text-left transition-colors"
+                >
+                  <Warehouse className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{room.name}</p>
+                    <p className="text-xs text-gray-400">
+                      {room.remainingCapacity} place{room.remainingCapacity > 1 ? "s" : ""} restante{room.remainingCapacity > 1 ? "s" : ""}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── STEP: Form ─────────────────────────────────────────────────────── */}
       {step === "form" && selectedSlot && (
         <form onSubmit={handleSubmit} className="space-y-3">
           <button
             type="button"
-            onClick={() => setStep("slot")}
+            onClick={() => {
+              if (resourceMode === "PICK_TIME_FIRST") {
+                setStep("room")
+              } else {
+                setStep("slot")
+              }
+            }}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
@@ -334,14 +476,18 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
                 <textarea
                   required={field.required}
                   value={customFieldValues[field.id] ?? ""}
-                  onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                  onChange={(e) =>
+                    setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                  }
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-400 min-h-[70px]"
                 />
               ) : field.type === "SELECT" ? (
                 <select
                   required={field.required}
                   value={customFieldValues[field.id] ?? ""}
-                  onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                  onChange={(e) =>
+                    setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                  }
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-400"
                 >
                   <option value="">Choisir…</option>
@@ -355,17 +501,32 @@ export function BookingWidget({ establishmentId, settings, isAuthenticated }: Bo
                     type="checkbox"
                     required={field.required}
                     checked={customFieldValues[field.id] === "true"}
-                    onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.checked ? "true" : "false" }))}
+                    onChange={(e) =>
+                      setCustomFieldValues((prev) => ({
+                        ...prev,
+                        [field.id]: e.target.checked ? "true" : "false",
+                      }))
+                    }
                     className="h-4 w-4"
                   />
                   {field.label}
                 </label>
               ) : (
                 <Input
-                  type={field.type === "NUMBER" ? "number" : field.type === "EMAIL" ? "email" : field.type === "PHONE" ? "tel" : "text"}
+                  type={
+                    field.type === "NUMBER"
+                      ? "number"
+                      : field.type === "EMAIL"
+                      ? "email"
+                      : field.type === "PHONE"
+                      ? "tel"
+                      : "text"
+                  }
                   required={field.required}
                   value={customFieldValues[field.id] ?? ""}
-                  onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                  onChange={(e) =>
+                    setCustomFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                  }
                   className="h-9 text-sm"
                 />
               )}

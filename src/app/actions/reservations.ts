@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
-import { getAvailableSlots } from "@/lib/availability"
+import { getAvailableSlots, getAvailableResourcesForSlot } from "@/lib/availability"
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import {
@@ -46,6 +46,7 @@ const reservationSettingsSchema = z.object({
   cancellationDeadlineHours: z.number().int().min(0),
   confirmationMessage: z.string().optional(),
   cancellationPolicyText: z.string().optional(),
+  resourceSelectionMode: z.enum(["HIDDEN", "PICK_RESOURCE_FIRST", "PICK_TIME_FIRST"]).default("HIDDEN"),
   weeklySchedule: weeklyScheduleSchema.default({}),
   customFieldDefs: z.array(customFieldDefSchema).default([]),
 })
@@ -221,12 +222,36 @@ export async function deleteReservationOverride(date: string) {
 
 // ─── Get Availability (public) ───────────────────────────────────────────────
 
-export async function getAvailability(establishmentId: string, dateStr: string) {
+export async function getAvailability(
+  establishmentId: string,
+  dateStr: string,
+  resourceId?: string | null
+) {
   const date = new Date(dateStr)
   if (isNaN(date.getTime())) return { error: "Date invalide", slots: [] }
 
-  const slots = await getAvailableSlots(establishmentId, date)
+  let slots = await getAvailableSlots(establishmentId, date)
+
+  // Filtrer par ressource si demandé (PICK_RESOURCE_FIRST)
+  if (resourceId) {
+    slots = slots.filter((s) => s.resourceId === resourceId)
+  }
+
   return { slots }
+}
+
+// ─── Get resources available for a specific slot (PICK_TIME_FIRST) ────────────
+
+export async function getResourcesForSlot(
+  establishmentId: string,
+  startAtStr: string,
+  partySize: number = 1
+) {
+  const startAt = new Date(startAtStr)
+  if (isNaN(startAt.getTime())) return { error: "Date invalide", resources: [] }
+
+  const resources = await getAvailableResourcesForSlot(establishmentId, startAt, partySize)
+  return { resources }
 }
 
 // ─── Create Reservation (user) ───────────────────────────────────────────────
@@ -303,6 +328,30 @@ export async function createReservation(data: unknown) {
           resolvedResourceId = slot.resourceId
         }
 
+        // Auto-assign si HIDDEN et pas de ressource explicite : prendre le premier slot
+        // actif avec capacité suffisante pour ce startAt (dans la même plage horaire)
+        if (!resolvedResourceId && settings.resourceSelectionMode === "HIDDEN") {
+          const alternateSlot = await tx.reservationSlot.findFirst({
+            where: {
+              establishmentId,
+              startAt: slot.startAt,
+              isActive: true,
+              resourceId: { not: null },
+            },
+            include: { resource: true },
+          })
+          if (alternateSlot?.resourceId) {
+            const altBooked = await tx.reservation.aggregate({
+              where: { slotId: alternateSlot.id, status: "CONFIRMED" },
+              _sum: { partySize: true },
+            })
+            const altAlreadyBooked = altBooked._sum.partySize ?? 0
+            if (altAlreadyBooked + partySize <= alternateSlot.capacity) {
+              resolvedResourceId = alternateSlot.resourceId
+            }
+          }
+        }
+
         // Compter les réservations sur ce slot
         const booked = await tx.reservation.aggregate({
           where: { slotId, status: "CONFIRMED" },
@@ -376,9 +425,10 @@ export async function createReservation(data: unknown) {
       return newReservation
     })
 
-    // ── Email de confirmation (non bloquant) ────────────────────────────────
+    // ── Email de confirmation client (non bloquant) ─────────────────────────
     const emailTo = customerEmail
     if (emailTo) {
+      console.info(`[reservation:email] Tentative envoi confirmation reservationId=${reservation.id} → ${emailTo}`)
       sendReservationConfirmationEmail({
         customerName,
         customerEmail: emailTo,
@@ -391,13 +441,35 @@ export async function createReservation(data: unknown) {
         partySize: reservation.partySize,
         cancellationPolicyText: settings.cancellationPolicyText,
         reservationId: reservation.id,
-      }).catch((err) => console.error("Email confirmation error:", err))
+      })
+        .then(() => console.info(`[reservation:email] Confirmation envoyée reservationId=${reservation.id}`))
+        .catch((err) => console.error(`[reservation:email] Erreur envoi confirmation reservationId=${reservation.id}:`, err))
+    } else {
+      console.warn(`[reservation:email] Pas d'email client pour reservationId=${reservation.id} — email non envoyé`)
     }
 
-    // ── Email à l'établissement (si phone comme proxy — skip si non configuré) ─
-    // Note: l'établissement peut avoir un email de notification dans le futur
-    // Pour l'instant on utilise le user.email si disponible via l'établissement
-    // (skip sans crash)
+    // ── Email notification établissement (non bloquant) ─────────────────────
+    // Récupérer l'email de l'user de l'établissement pour notification
+    void prisma.establishment.findUnique({
+      where: { id: establishmentId },
+      include: { user: { select: { email: true } } },
+    }).then((est) => {
+      const notifEmail = est?.user?.email
+      if (!notifEmail) return
+      console.info(`[reservation:email] Tentative envoi notification établissement reservationId=${reservation.id} → ${notifEmail}`)
+      return sendReservationNotificationToEstablishment(notifEmail, {
+        customerName,
+        customerEmail,
+        establishmentName: reservation.establishment.name,
+        establishmentAddress: reservation.establishment.address,
+        establishmentCity: reservation.establishment.city,
+        activityTitle: reservation.establishment.activity?.title,
+        startAt: reservation.startAt,
+        endAt: reservation.endAt,
+        partySize: reservation.partySize,
+        reservationId: reservation.id,
+      })
+    }).catch((err) => console.error(`[reservation:email] Erreur notification établissement reservationId=${reservation.id}:`, err))
 
     revalidatePath(`/activite`)
     return { reservation }

@@ -8,7 +8,7 @@
  * - z-index correct pour ne pas bloquer le scroll
  */
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toggleFavorite } from "@/app/actions/favorites"
 import { toast } from "sonner"
 import { Heart, Loader2 } from "lucide-react"
@@ -36,6 +36,11 @@ export function FavoriteButton({
 }: FavoriteButtonProps) {
   const [isFavorited, setIsFavorited] = useState(initialFavorited)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Sync avec la prop parent (ex: même activité dans le feed — plusieurs vidéos)
+  useEffect(() => {
+    if (!isLoading) setIsFavorited(initialFavorited)
+  }, [initialFavorited]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleClick(e: React.MouseEvent) {
     e.preventDefault()

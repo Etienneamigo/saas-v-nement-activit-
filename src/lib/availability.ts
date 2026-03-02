@@ -224,7 +224,9 @@ async function getAvailabilityFromWeeklySchedule(
 
 /**
  * Génère des ReservationSlot en base depuis les WeeklySchedule pour N jours.
- * Appelé par l'action "Générer les créneaux".
+ * - Si des ressources actives existent → génère un slot par ressource × créneau
+ * - Sinon → comportement global (resourceId = null)
+ * - Anti-duplication : upsert par (establishmentId, startAt, resourceId)
  */
 export async function generateAndPersistSlots(
   establishmentId: string,
@@ -236,6 +238,13 @@ export async function generateAndPersistSlots(
   })
 
   if (!settings || !settings.enabled) return { created: 0 }
+
+  // Charger les ressources actives
+  const resources = await prisma.reservationResource.findMany({
+    where: { establishmentId, isActive: true },
+    orderBy: { createdAt: "asc" },
+  })
+  const hasResources = resources.length > 0
 
   const now = new Date()
   let created = 0
@@ -264,31 +273,111 @@ export async function generateAndPersistSlots(
       openRanges = normalizeOpenRanges(schedule.openRanges)
     }
 
-    const capacity = override?.customCapacity ?? settings.capacityPerSlot
     const rawSlots = generateSlots(targetDate, openRanges, settings.slotDurationMinutes, settings.timezone)
 
-    for (const slot of rawSlots) {
-      // Skip si déjà existant (même startAt)
-      const existing = await prisma.reservationSlot.findFirst({
-        where: { establishmentId, startAt: slot.startAt },
-      })
-      if (existing) continue
+    if (hasResources) {
+      // ── Mode multi-ressources : un slot par (créneau × ressource) ────────────
+      for (const slot of rawSlots) {
+        for (const resource of resources) {
+          const capacity = resource.capacity
 
-      await prisma.reservationSlot.create({
-        data: {
-          establishmentId,
-          startAt: slot.startAt,
-          endAt: slot.endAt,
-          capacity,
-          isActive: true,
-          source: "AUTO",
-        },
-      })
-      created++
+          // Anti-duplication par (establishmentId, startAt, resourceId)
+          const existing = await prisma.reservationSlot.findFirst({
+            where: { establishmentId, startAt: slot.startAt, resourceId: resource.id },
+          })
+          if (existing) continue
+
+          await prisma.reservationSlot.create({
+            data: {
+              establishmentId,
+              startAt: slot.startAt,
+              endAt: slot.endAt,
+              capacity,
+              isActive: true,
+              resourceId: resource.id,
+              source: "AUTO",
+            },
+          })
+          created++
+        }
+      }
+    } else {
+      // ── Mode global : slots sans ressource ────────────────────────────────────
+      const capacity = override?.customCapacity ?? settings.capacityPerSlot
+
+      for (const slot of rawSlots) {
+        // Anti-duplication par (establishmentId, startAt, resourceId=null)
+        const existing = await prisma.reservationSlot.findFirst({
+          where: { establishmentId, startAt: slot.startAt, resourceId: null },
+        })
+        if (existing) continue
+
+        await prisma.reservationSlot.create({
+          data: {
+            establishmentId,
+            startAt: slot.startAt,
+            endAt: slot.endAt,
+            capacity,
+            isActive: true,
+            source: "AUTO",
+          },
+        })
+        created++
+      }
     }
   }
 
   return { created }
+}
+
+/**
+ * Retourne les ressources disponibles (ayant encore de la capacité) pour un créneau donné.
+ * Utilisé pour le mode PICK_TIME_FIRST.
+ */
+export async function getAvailableResourcesForSlot(
+  establishmentId: string,
+  startAt: Date,
+  partySize: number = 1
+): Promise<Array<{ id: string; name: string; remainingCapacity: number }>> {
+  // Chercher les slots persistés pour ce startAt avec une ressource
+  const slots = await prisma.reservationSlot.findMany({
+    where: {
+      establishmentId,
+      startAt,
+      isActive: true,
+      resourceId: { not: null },
+    },
+    include: { resource: true },
+  })
+
+  if (slots.length === 0) return []
+
+  const slotIds = slots.map((s) => s.id)
+  const bookedBySlot = await prisma.reservation.groupBy({
+    by: ["slotId"],
+    where: {
+      establishmentId,
+      status: "CONFIRMED",
+      slotId: { in: slotIds },
+    },
+    _sum: { partySize: true },
+  })
+
+  const bookedMap = new Map<string, number>()
+  for (const r of bookedBySlot) {
+    if (r.slotId) bookedMap.set(r.slotId, r._sum.partySize ?? 0)
+  }
+
+  return slots
+    .filter((slot) => {
+      const booked = bookedMap.get(slot.id) ?? 0
+      return slot.capacity - booked >= partySize
+    })
+    .map((slot) => ({
+      id: slot.resourceId!,
+      name: slot.resource?.name ?? "Salle",
+      remainingCapacity: slot.capacity - (bookedMap.get(slot.id) ?? 0),
+    }))
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
