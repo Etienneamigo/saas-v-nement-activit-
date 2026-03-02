@@ -9,6 +9,7 @@
 
 import { prisma } from "@/lib/db"
 import type { ReservationSettings, WeeklySchedule, ReservationOverride } from "@prisma/client"
+import { getEffectiveRules } from "@/lib/resource-rules"
 
 export interface TimeRange {
   start: string // "HH:mm"
@@ -277,8 +278,14 @@ export async function generateAndPersistSlots(
 
     if (hasResources) {
       // ── Mode multi-ressources : un slot par (créneau × ressource) ────────────
-      for (const slot of rawSlots) {
-        for (const resource of resources) {
+      for (const resource of resources) {
+        // Per-resource slot duration override
+        const rules = getEffectiveRules(resource, settings)
+        const resourceSlots = rules.slotDurationMinutes !== settings.slotDurationMinutes
+          ? generateSlots(targetDate, openRanges, rules.slotDurationMinutes, settings.timezone)
+          : rawSlots
+
+        for (const slot of resourceSlots) {
           const capacity = resource.capacity
 
           // Anti-duplication par (establishmentId, startAt, resourceId)
@@ -339,6 +346,11 @@ export async function getAvailableResourcesForSlot(
   startAt: Date,
   partySize: number = 1
 ): Promise<Array<{ id: string; name: string; remainingCapacity: number }>> {
+  // Load settings for defaults
+  const settings = await prisma.reservationSettings.findUnique({
+    where: { establishmentId },
+  })
+
   // Chercher les slots persistés pour ce startAt avec une ressource
   const slots = await prisma.reservationSlot.findMany({
     where: {
@@ -371,11 +383,19 @@ export async function getAvailableResourcesForSlot(
   return slots
     .filter((slot) => {
       const booked = bookedMap.get(slot.id) ?? 0
-      return slot.capacity - booked >= partySize
+      if (slot.capacity - booked < partySize) return false
+
+      // Check per-resource party size constraints
+      if (slot.resource && settings) {
+        const rules = getEffectiveRules(slot.resource, settings)
+        if (partySize < rules.minPartySize || partySize > rules.maxPartySize) return false
+      }
+
+      return true
     })
     .map((slot) => ({
       id: slot.resourceId!,
-      name: slot.resource?.name ?? "Salle",
+      name: slot.resource?.name ?? "Ressource",
       remainingCapacity: slot.capacity - (bookedMap.get(slot.id) ?? 0),
     }))
 }

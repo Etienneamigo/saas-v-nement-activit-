@@ -258,7 +258,7 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
         {[
           { key: "settings", label: "Paramètres", icon: Settings },
           { key: "slots", label: "Créneaux", icon: Calendar },
-          { key: "resources", label: "Salles", icon: Warehouse },
+          { key: "resources", label: "Ressources", icon: Warehouse },
           { key: "list", label: "Réservations reçues", icon: List },
         ].map(({ key, label, icon: Icon }) => (
           <button
@@ -305,69 +305,31 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
                 <span className="text-sm">Afficher aussi le lien de réservation externe (si configuré)</span>
               </label>
               <div className="space-y-2 pt-2">
-                <Label>Mode de sélection de salle (côté client)</Label>
+                <Label>Mode de sélection de ressource (côté client)</Label>
                 <Select value={resourceSelectionMode} onValueChange={(v) => setResourceSelectionMode(v as "HIDDEN" | "PICK_RESOURCE_FIRST" | "PICK_TIME_FIRST")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="HIDDEN">Automatique (client ne choisit pas)</SelectItem>
-                    <SelectItem value="PICK_RESOURCE_FIRST">Client choisit d&apos;abord la salle</SelectItem>
-                    <SelectItem value="PICK_TIME_FIRST">Client choisit d&apos;abord le créneau, puis la salle</SelectItem>
+                    <SelectItem value="PICK_RESOURCE_FIRST">Client choisit d&apos;abord la ressource</SelectItem>
+                    <SelectItem value="PICK_TIME_FIRST">Client choisit d&apos;abord le créneau, puis la ressource</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-400">
-                  {resourceSelectionMode === "HIDDEN" && "La salle est assignée automatiquement. Idéal pour les bowling, pistes identiques…"}
-                  {resourceSelectionMode === "PICK_RESOURCE_FIRST" && "Le client sélectionne d'abord une salle puis voit ses disponibilités. Idéal pour les escape games."}
-                  {resourceSelectionMode === "PICK_TIME_FIRST" && "Le client choisit un créneau puis sélectionne parmi les salles disponibles."}
+                  {resourceSelectionMode === "HIDDEN" && "La ressource est assignée automatiquement. Idéal pour les bowling, pistes identiques…"}
+                  {resourceSelectionMode === "PICK_RESOURCE_FIRST" && "Le client sélectionne d'abord une ressource puis voit ses disponibilités. Idéal pour les escape games."}
+                  {resourceSelectionMode === "PICK_TIME_FIRST" && "Le client choisit un créneau puis sélectionne parmi les ressources disponibles."}
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Créneaux */}
+          {/* Configuration générale */}
           <Card>
             <CardHeader>
-              <CardTitle>Règles des créneaux</CardTitle>
+              <CardTitle>Configuration générale</CardTitle>
+              <CardDescription>Paramètres globaux qui s&apos;appliquent à toutes les réservations</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Durée d&apos;un créneau (minutes)</Label>
-                <Select value={slotDuration} onValueChange={setSlotDuration}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[15, 30, 45, 60, 90, 120, 180, 240].map((v) => (
-                      <SelectItem key={v} value={String(v)}>{v} min</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Capacité par créneau</Label>
-                <Input
-                  type="number" min="1"
-                  value={capacity}
-                  onChange={(e) => setCapacity(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Taille min du groupe</Label>
-                <Input
-                  type="number" min="1"
-                  value={minParty}
-                  onChange={(e) => setMinParty(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Taille max du groupe</Label>
-                <Input
-                  type="number" min="1"
-                  value={maxParty}
-                  onChange={(e) => setMaxParty(e.target.value)}
-                />
-              </div>
-
               <div className="space-y-2">
                 <Label>Délai minimum (minutes avant)</Label>
                 <Input
@@ -378,15 +340,6 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
               </div>
 
               <div className="space-y-2">
-                <Label>Fenêtre de réservation (jours)</Label>
-                <Input
-                  type="number" min="1" max="365"
-                  value={bookingWindow}
-                  onChange={(e) => setBookingWindow(e.target.value)}
-                />
-              </div>
-
-              <div className="col-span-2 space-y-2">
                 <Label>Timezone</Label>
                 <Select value={timezone} onValueChange={setTimezone}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -707,7 +660,28 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
             name: r.name,
             capacity: r.capacity,
             isActive: r.isActive,
+            description: (r as Record<string, unknown>).description as string | null ?? null,
+            imageUrl: (r as Record<string, unknown>).imageUrl as string | null ?? null,
+            useCustomRules: (r as Record<string, unknown>).useCustomRules as boolean ?? false,
+            minPartySizeOverride: (r as Record<string, unknown>).minPartySizeOverride as number | null ?? null,
+            maxPartySizeOverride: (r as Record<string, unknown>).maxPartySizeOverride as number | null ?? null,
+            slotDurationMinutesOverride: (r as Record<string, unknown>).slotDurationMinutesOverride as number | null ?? null,
+            bookingWindowDaysOverride: (r as Record<string, unknown>).bookingWindowDaysOverride as number | null ?? null,
           }))}
+          defaultRules={{
+            slotDurationMinutes: parseInt(slotDuration),
+            capacityPerSlot: parseInt(capacity),
+            minPartySize: parseInt(minParty),
+            maxPartySize: parseInt(maxParty),
+            bookingWindowDays: parseInt(bookingWindow),
+          }}
+          onDefaultRulesChange={(rules) => {
+            setSlotDuration(String(rules.slotDurationMinutes))
+            setCapacity(String(rules.capacityPerSlot))
+            setMinParty(String(rules.minPartySize))
+            setMaxParty(String(rules.maxPartySize))
+            setBookingWindow(String(rules.bookingWindowDays))
+          }}
           onResourcesChange={(updated) =>
             setResources(updated.map((r) => ({
               ...r,

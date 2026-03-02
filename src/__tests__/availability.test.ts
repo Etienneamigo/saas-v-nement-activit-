@@ -315,6 +315,118 @@ describe("normalizeOpenRanges", () => {
   })
 })
 
+// ─── getEffectiveRules tests ─────────────────────────────────────────────────
+
+function getEffectiveRules(
+  resource: { useCustomRules: boolean; minPartySizeOverride: number | null; maxPartySizeOverride: number | null; slotDurationMinutesOverride: number | null; bookingWindowDaysOverride: number | null } | null | undefined,
+  settings: { minPartySize: number; maxPartySize: number; slotDurationMinutes: number; bookingWindowDays: number }
+) {
+  if (!resource || !resource.useCustomRules) {
+    return {
+      minPartySize: settings.minPartySize,
+      maxPartySize: settings.maxPartySize,
+      slotDurationMinutes: settings.slotDurationMinutes,
+      bookingWindowDays: settings.bookingWindowDays,
+    }
+  }
+  return {
+    minPartySize: resource.minPartySizeOverride ?? settings.minPartySize,
+    maxPartySize: resource.maxPartySizeOverride ?? settings.maxPartySize,
+    slotDurationMinutes: resource.slotDurationMinutesOverride ?? settings.slotDurationMinutes,
+    bookingWindowDays: resource.bookingWindowDaysOverride ?? settings.bookingWindowDays,
+  }
+}
+
+describe("getEffectiveRules", () => {
+  const defaultSettings = {
+    minPartySize: 1,
+    maxPartySize: 10,
+    slotDurationMinutes: 60,
+    bookingWindowDays: 30,
+  }
+
+  it("returns settings defaults when resource is null", () => {
+    const rules = getEffectiveRules(null, defaultSettings)
+    expect(rules).toEqual(defaultSettings)
+  })
+
+  it("returns settings defaults when resource has useCustomRules=false", () => {
+    const resource = {
+      useCustomRules: false,
+      minPartySizeOverride: 5,
+      maxPartySizeOverride: 20,
+      slotDurationMinutesOverride: 90,
+      bookingWindowDaysOverride: 14,
+    }
+    const rules = getEffectiveRules(resource, defaultSettings)
+    expect(rules).toEqual(defaultSettings)
+  })
+
+  it("uses override values when resource has useCustomRules=true and overrides set", () => {
+    const resource = {
+      useCustomRules: true,
+      minPartySizeOverride: 2,
+      maxPartySizeOverride: 6,
+      slotDurationMinutesOverride: 90,
+      bookingWindowDaysOverride: 14,
+    }
+    const rules = getEffectiveRules(resource, defaultSettings)
+    expect(rules).toEqual({
+      minPartySize: 2,
+      maxPartySize: 6,
+      slotDurationMinutes: 90,
+      bookingWindowDays: 14,
+    })
+  })
+
+  it("falls back to settings for null overrides even with useCustomRules=true", () => {
+    const resource = {
+      useCustomRules: true,
+      minPartySizeOverride: null,
+      maxPartySizeOverride: 6,
+      slotDurationMinutesOverride: null,
+      bookingWindowDaysOverride: null,
+    }
+    const rules = getEffectiveRules(resource, defaultSettings)
+    expect(rules).toEqual({
+      minPartySize: 1,     // from settings
+      maxPartySize: 6,     // from override
+      slotDurationMinutes: 60,  // from settings
+      bookingWindowDays: 30,    // from settings
+    })
+  })
+
+  it("validates partySize against resource overrides (custom escape game scenario)", () => {
+    const settings = { minPartySize: 1, maxPartySize: 10, slotDurationMinutes: 60, bookingWindowDays: 30 }
+    const escapeRoom = {
+      useCustomRules: true,
+      minPartySizeOverride: 2,
+      maxPartySizeOverride: 5,
+      slotDurationMinutesOverride: 90,
+      bookingWindowDaysOverride: null,
+    }
+    const rules = getEffectiveRules(escapeRoom, settings)
+    const partySize = 6
+    expect(partySize > rules.maxPartySize).toBe(true) // should be rejected
+    expect(rules.slotDurationMinutes).toBe(90)
+    expect(rules.bookingWindowDays).toBe(30) // inherited from settings
+  })
+
+  it("bowling scenario: all resources use defaults (no customization needed)", () => {
+    const settings = { minPartySize: 1, maxPartySize: 8, slotDurationMinutes: 120, bookingWindowDays: 30 }
+    const lane1 = {
+      useCustomRules: false,
+      minPartySizeOverride: null,
+      maxPartySizeOverride: null,
+      slotDurationMinutesOverride: null,
+      bookingWindowDaysOverride: null,
+    }
+    const rules = getEffectiveRules(lane1, settings)
+    expect(rules.slotDurationMinutes).toBe(120)
+    expect(rules.maxPartySize).toBe(8)
+  })
+})
+
 describe("Capacity & booking window (unit logic)", () => {
   it("capacity check: partySize > remainingCapacity should block", () => {
     const capacityPerSlot = 5

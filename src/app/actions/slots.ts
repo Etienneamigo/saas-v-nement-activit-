@@ -12,6 +12,13 @@ const resourceSchema = z.object({
   name: z.string().min(1, "Nom requis").max(100),
   capacity: z.number().int().min(1, "Capacité min 1"),
   isActive: z.boolean().default(true),
+  description: z.string().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
+  useCustomRules: z.boolean().default(false),
+  minPartySizeOverride: z.number().int().min(1).nullable().optional(),
+  maxPartySizeOverride: z.number().int().min(1).nullable().optional(),
+  slotDurationMinutesOverride: z.number().int().min(15).max(480).nullable().optional(),
+  bookingWindowDaysOverride: z.number().int().min(1).max(365).nullable().optional(),
 })
 
 const slotSchema = z.object({
