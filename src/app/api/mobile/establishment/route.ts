@@ -38,7 +38,7 @@ export async function PATCH(request: NextRequest) {
   try { body = await request.json() } catch { body = {} }
 
   const data: any = {}
-  const fields = ["name","phone","website","bookingUrl","address","city","zipCode","country","lat","lng"] as const
+  const fields = ["name","phone","website","bookingUrl","address","city","zipCode","country","lat","lng","accessWheelchair","accessToilets","accessParking","accessElevator","accessLevelEntry"] as const
   for (const k of fields) {
     if (k in body) data[k] = body[k]
   }
@@ -47,6 +47,9 @@ export async function PATCH(request: NextRequest) {
   if ("name" in data && typeof data.name !== "string") return NextResponse.json({ error: "Invalid name" }, { status: 400 })
   if ("lat" in data && data.lat !== null && typeof data.lat !== "number") return NextResponse.json({ error: "Invalid lat" }, { status: 400 })
   if ("lng" in data && data.lng !== null && typeof data.lng !== "number") return NextResponse.json({ error: "Invalid lng" }, { status: 400 })
+  for (const boolField of ["accessWheelchair","accessToilets","accessParking","accessElevator","accessLevelEntry"] as const) {
+    if (boolField in data && typeof data[boolField] !== "boolean") return NextResponse.json({ error: `Invalid ${boolField}` }, { status: 400 })
+  }
 
   const updated = await prisma.establishment.update({
     where: { id: user.establishmentId },
