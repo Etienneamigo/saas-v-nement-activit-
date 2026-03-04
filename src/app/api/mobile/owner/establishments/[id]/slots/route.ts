@@ -27,12 +27,24 @@ export async function GET(
   const dateFrom = searchParams.get("dateFrom") || undefined
   const dateTo = searchParams.get("dateTo") || undefined
 
+  // Check if establishment has active resources → filter out orphan slots
+  const activeResourceCount = await prisma.reservationResource.count({
+    where: { establishmentId, isActive: true },
+  })
+
   const where: Record<string, unknown> = { establishmentId }
   if (dateFrom || dateTo) {
     where.startAt = {
       ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
       ...(dateTo ? { lte: new Date(dateTo) } : {}),
     }
+  }
+  // Si des ressources existent, masquer les slots orphelins (AUTO + resourceId=null)
+  if (activeResourceCount > 0) {
+    where.OR = [
+      { resourceId: { not: null } },
+      { source: "MANUAL" },
+    ]
   }
 
   const slots = await prisma.reservationSlot.findMany({
@@ -65,7 +77,10 @@ export async function POST(
 
   const parsed = slotSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    return NextResponse.json(
+      { error: parsed.error.issues[0].message, issues: parsed.error.issues },
+      { status: 400 }
+    )
   }
 
   const { startAt, endAt, capacity, isActive, resourceId } = parsed.data

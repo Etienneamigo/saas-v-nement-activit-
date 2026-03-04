@@ -37,7 +37,10 @@ export async function PATCH(
 
   const parsed = slotSchema.partial().safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    return NextResponse.json(
+      { error: parsed.error.issues[0].message, issues: parsed.error.issues },
+      { status: 400 }
+    )
   }
 
   const slot = await prisma.reservationSlot.update({

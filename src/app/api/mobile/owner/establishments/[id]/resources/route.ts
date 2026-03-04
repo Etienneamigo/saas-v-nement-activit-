@@ -54,7 +54,10 @@ export async function POST(
 
   const parsed = resourceSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+    return NextResponse.json(
+      { error: parsed.error.issues[0].message, issues: parsed.error.issues },
+      { status: 400 }
+    )
   }
 
   const resource = await prisma.reservationResource.create({
