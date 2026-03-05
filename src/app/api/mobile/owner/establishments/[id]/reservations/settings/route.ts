@@ -8,6 +8,8 @@ import { Prisma } from "@prisma/client"
 const timeRangeSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/, "Format HH:mm requis"),
   end: z.string().regex(/^\d{2}:\d{2}$/, "Format HH:mm requis"),
+}).refine((r) => r.start !== r.end, {
+  message: "L'heure de début et de fin ne peuvent pas être identiques (plage invalide)",
 })
 
 const weeklyScheduleSchema = z.record(

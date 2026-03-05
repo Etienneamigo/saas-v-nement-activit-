@@ -468,6 +468,8 @@ function normalizeOpenRanges(raw: unknown): TimeRange[] {
       const start = normalizeTimeValue(obj.start)
       const end = normalizeTimeValue(obj.end)
       if (!start || !end) return null
+      // Ignore invalid ranges where start === end (e.g. "00:00"-"00:00" = closed)
+      if (start === end) return null
       return { start, end }
     })
     .filter((r): r is TimeRange => r !== null)

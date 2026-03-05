@@ -27,6 +27,7 @@ import {
   ChevronDown,
   ChevronUp,
   CalendarPlus,
+  AlertTriangle,
 } from "lucide-react"
 
 type Slot = {
@@ -42,6 +43,14 @@ type Slot = {
 }
 
 type Resource = { id: string; name: string; capacity: number }
+type ScheduleRange = { start: string; end: string }
+
+/** Returns true if at least one day has a valid open range (start !== end, non-empty) */
+function hasValidScheduleRanges(schedule: Record<string, ScheduleRange[]>): boolean {
+  return Object.values(schedule).some((ranges) =>
+    ranges.some((r) => r.start !== r.end)
+  )
+}
 
 function formatDate(d: Date | string) {
   return new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })
@@ -69,9 +78,10 @@ function groupByDate(slots: Slot[]) {
 
 interface SlotsTabProps {
   resources: Resource[]
+  schedule?: Record<string, ScheduleRange[]>
 }
 
-export function SlotsTab({ resources }: SlotsTabProps) {
+export function SlotsTab({ resources, schedule }: SlotsTabProps) {
   const [slots, setSlots] = useState<Slot[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [viewDate, setViewDate] = useState(() => new Date().toISOString().split("T")[0])
@@ -90,6 +100,8 @@ export function SlotsTab({ resources }: SlotsTabProps) {
 
   // Duplicate form
   const [dupDates, setDupDates] = useState("")
+
+  const canGenerate = schedule ? hasValidScheduleRanges(schedule) : true
 
   const dateFrom = viewDate
   const dateTo = (() => {
@@ -239,8 +251,9 @@ export function SlotsTab({ resources }: SlotsTabProps) {
           variant="outline"
           size="sm"
           onClick={handleGenerate}
-          disabled={generating}
+          disabled={generating || !canGenerate}
           className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          title={!canGenerate ? "Définissez vos horaires d'ouverture avant de générer des créneaux." : undefined}
         >
           {generating ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
@@ -250,6 +263,14 @@ export function SlotsTab({ resources }: SlotsTabProps) {
           Générer depuis paramètres
         </Button>
       </div>
+
+      {!canGenerate && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 inline mr-2" />
+          Définissez vos horaires d&apos;ouverture avant de générer des créneaux.
+          Rendez-vous dans l&apos;onglet <strong>Paramètres</strong> pour configurer vos plages horaires.
+        </div>
+      )}
 
       {/* Add/Edit form */}
       {showAddForm && (

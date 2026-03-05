@@ -19,8 +19,6 @@ const generateSchema = z.object({
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateTo must be YYYY-MM-DD"),
 })
 
-const bodySchema = z.union([generateSchema, createSchema])
-
 export async function GET(
   request: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -84,17 +82,10 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const parsed = bodySchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0].message, issues: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  // ── Generate mode ─────────────────────────────────────────────────────────
-  if ("action" in parsed.data && parsed.data.action === "generate") {
-    const { dateFrom, dateTo } = parsed.data
+  // ── Try generate mode first (type-safe: separate parse) ──────────────────
+  const genParsed = generateSchema.safeParse(body)
+  if (genParsed.success) {
+    const { dateFrom, dateTo } = genParsed.data
     const from = new Date(dateFrom)
     const to = new Date(dateTo)
 
@@ -121,7 +112,15 @@ export async function POST(
   }
 
   // ── Create mode ───────────────────────────────────────────────────────────
-  const { startAt, endAt, capacity, isActive, resourceId } = parsed.data
+  const createParsed = createSchema.safeParse(body)
+  if (!createParsed.success) {
+    return NextResponse.json(
+      { error: createParsed.error.issues[0].message, issues: createParsed.error.issues },
+      { status: 400 }
+    )
+  }
+
+  const { startAt, endAt, capacity, isActive, resourceId } = createParsed.data
 
   if (new Date(endAt) <= new Date(startAt)) {
     return NextResponse.json({ error: "L'heure de fin doit être après l'heure de début" }, { status: 400 })

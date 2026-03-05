@@ -648,7 +648,10 @@ export function ReservationsClient({ initialSettings, initialOverrides, initialR
             génération automatique. Les paramètres (onglet Paramètres) servent de base pour la
             génération initiale.
           </div>
-          <SlotsTab resources={resources.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }))} />
+          <SlotsTab
+            resources={resources.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity }))}
+            schedule={schedule}
+          />
         </div>
       )}
 
