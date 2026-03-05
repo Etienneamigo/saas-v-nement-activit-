@@ -226,9 +226,9 @@ List slots with reservation counts.
 - `dateTo` - ISO date string
 
 #### POST /api/mobile/owner/establishments/[id]/slots
-Create a manual slot.
+Create a manual slot **or** generate slots from the weekly schedule.
 
-**Body:**
+**Mode 1 — Create a single slot:**
 ```json
 {
   "startAt": "2025-01-15T10:00:00.000Z",
@@ -238,6 +238,34 @@ Create a manual slot.
   "resourceId": "clxyz..."
 }
 ```
+
+**Response (201):** `{ "slot": { ... } }`
+
+**Mode 2 — Generate slots from weekly schedule:**
+```json
+{
+  "action": "generate",
+  "dateFrom": "2025-01-15",
+  "dateTo": "2025-02-15"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| action | `"generate"` | Yes | Must be the literal string `"generate"` |
+| dateFrom | `string` | Yes | Start date (`YYYY-MM-DD`) |
+| dateTo | `string` | Yes | End date (`YYYY-MM-DD`, must be >= dateFrom) |
+
+**Response (200):**
+```json
+{
+  "count": 120,
+  "cleanedOrphans": 0
+}
+```
+
+- `count`: number of new slots created (duplicates are skipped via upsert)
+- `cleanedOrphans`: number of orphan slots cleaned up (when resources exist)
 
 #### PATCH /api/mobile/owner/establishments/[id]/slots/[slotId]
 Update a slot (partial).
