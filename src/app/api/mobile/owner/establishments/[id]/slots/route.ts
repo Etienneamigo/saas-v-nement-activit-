@@ -2,15 +2,24 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { requireOwner, isErrorResponse } from "../../../_helpers/auth"
 import { enforceApiRateLimit } from "../../../../_helpers/rl"
+import { generateAndPersistSlots } from "@/lib/availability"
 import { z } from "zod"
 
-const slotSchema = z.object({
+const createSchema = z.object({
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),
   capacity: z.number().int().min(1),
   isActive: z.boolean().default(true),
   resourceId: z.string().cuid().optional().nullable(),
 })
+
+const generateSchema = z.object({
+  action: z.literal("generate"),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateFrom must be YYYY-MM-DD"),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateTo must be YYYY-MM-DD"),
+})
+
+const bodySchema = z.union([generateSchema, createSchema])
 
 export async function GET(
   request: NextRequest,
@@ -75,7 +84,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const parsed = slotSchema.safeParse(body)
+  const parsed = bodySchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0].message, issues: parsed.error.issues },
@@ -83,6 +92,35 @@ export async function POST(
     )
   }
 
+  // ── Generate mode ─────────────────────────────────────────────────────────
+  if ("action" in parsed.data && parsed.data.action === "generate") {
+    const { dateFrom, dateTo } = parsed.data
+    const from = new Date(dateFrom)
+    const to = new Date(dateTo)
+
+    if (to < from) {
+      return NextResponse.json(
+        { error: "dateTo doit être >= dateFrom" },
+        { status: 400 }
+      )
+    }
+
+    // Calculate days ahead from today to dateTo (inclusive)
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const daysAhead = Math.max(
+      1,
+      Math.ceil((to.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    )
+
+    const result = await generateAndPersistSlots(establishmentId, daysAhead)
+    return NextResponse.json({
+      count: result.created,
+      cleanedOrphans: result.cleanedOrphans,
+    })
+  }
+
+  // ── Create mode ───────────────────────────────────────────────────────────
   const { startAt, endAt, capacity, isActive, resourceId } = parsed.data
 
   if (new Date(endAt) <= new Date(startAt)) {
