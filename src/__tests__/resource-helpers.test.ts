@@ -60,8 +60,9 @@ describe("getEffectiveRules", () => {
     expect(rules).toEqual(defaultSettings)
   })
 
-  it("returns defaults when useCustomRules is false", () => {
+  it("returns defaults when useCustomRules is false (maxPartySize = capacity)", () => {
     const resource = {
+      capacity: 10,
       useCustomRules: false,
       minPartySizeOverride: 5,
       maxPartySizeOverride: 20,
@@ -72,18 +73,19 @@ describe("getEffectiveRules", () => {
     expect(rules).toEqual(defaultSettings)
   })
 
-  it("returns overrides when useCustomRules is true", () => {
+  it("returns overrides when useCustomRules is true (maxPartySize from capacity)", () => {
     const resource = {
+      capacity: 8, // capacity is now source of truth for maxPartySize
       useCustomRules: true,
       minPartySizeOverride: 2,
-      maxPartySizeOverride: 8,
+      maxPartySizeOverride: 99, // ignored — capacity wins
       slotDurationMinutesOverride: 45,
       bookingWindowDaysOverride: 14,
     }
     const rules = getEffectiveRules(resource, defaultSettings)
     expect(rules).toEqual({
       minPartySize: 2,
-      maxPartySize: 8,
+      maxPartySize: 8,  // from capacity, NOT maxPartySizeOverride
       slotDurationMinutes: 45,
       bookingWindowDays: 14,
     })
@@ -91,16 +93,17 @@ describe("getEffectiveRules", () => {
 
   it("falls back to defaults for null overrides when useCustomRules is true", () => {
     const resource = {
+      capacity: 5, // capacity is now source of truth for maxPartySize
       useCustomRules: true,
       minPartySizeOverride: null,
-      maxPartySizeOverride: 5,
+      maxPartySizeOverride: 99, // ignored — capacity wins
       slotDurationMinutesOverride: null,
       bookingWindowDaysOverride: null,
     }
     const rules = getEffectiveRules(resource, defaultSettings)
     expect(rules).toEqual({
       minPartySize: 1,       // from default
-      maxPartySize: 5,       // from override
+      maxPartySize: 5,       // from capacity
       slotDurationMinutes: 60, // from default
       bookingWindowDays: 30,   // from default
     })

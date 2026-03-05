@@ -56,12 +56,19 @@ export async function getAvailableSlots(
   const dayStart = new Date(`${dateStr}T00:00:00.000Z`)
   const dayEnd = new Date(`${dateStr}T23:59:59.999Z`)
 
+  // Vérifier s'il y a des ressources actives (pour filtrer les slots orphelins)
+  const activeResourceCount = await prisma.reservationResource.count({
+    where: { establishmentId, isActive: true },
+  })
+
   // Vérifier si des slots persistés existent pour ce jour
   const persistedSlots = await prisma.reservationSlot.findMany({
     where: {
       establishmentId,
       startAt: { gte: dayStart, lte: dayEnd },
       isActive: true,
+      // Si des ressources existent, exclure les slots orphelins (resourceId=null)
+      ...(activeResourceCount > 0 ? { resourceId: { not: null } } : {}),
     },
     include: { resource: true },
     orderBy: { startAt: "asc" },
@@ -232,13 +239,13 @@ async function getAvailabilityFromWeeklySchedule(
 export async function generateAndPersistSlots(
   establishmentId: string,
   daysAhead: number
-): Promise<{ created: number }> {
+): Promise<{ created: number; cleanedOrphans: number }> {
   const settings = await prisma.reservationSettings.findUnique({
     where: { establishmentId },
     include: { weeklySchedule: true },
   })
 
-  if (!settings || !settings.enabled) return { created: 0 }
+  if (!settings || !settings.enabled) return { created: 0, cleanedOrphans: 0 }
 
   // Charger les ressources actives
   const resources = await prisma.reservationResource.findMany({
@@ -246,6 +253,12 @@ export async function generateAndPersistSlots(
     orderBy: { createdAt: "asc" },
   })
   const hasResources = resources.length > 0
+
+  // ── Cleanup orphan slots (AUTO, resourceId=null) when resources exist ──────
+  let cleanedOrphans = 0
+  if (hasResources) {
+    cleanedOrphans = await cleanupOrphanSlots(establishmentId)
+  }
 
   const now = new Date()
   let created = 0
@@ -278,6 +291,7 @@ export async function generateAndPersistSlots(
 
     if (hasResources) {
       // ── Mode multi-ressources : un slot par (créneau × ressource) ────────────
+      // Ne crée JAMAIS de slot sans resourceId quand des ressources existent
       for (const resource of resources) {
         // Per-resource slot duration override
         const rules = getEffectiveRules(resource, settings)
@@ -334,7 +348,47 @@ export async function generateAndPersistSlots(
     }
   }
 
-  return { created }
+  return { created, cleanedOrphans }
+}
+
+/**
+ * Supprime les slots AUTO orphelins (resourceId=null) pour les établissements
+ * qui possèdent des ressources actives.
+ * Ne supprime PAS les slots référencés par des réservations existantes (sécurité).
+ * Les slots référencés sont désactivés (isActive=false) pour être masqués.
+ */
+export async function cleanupOrphanSlots(establishmentId: string): Promise<number> {
+  // Trouver tous les slots AUTO sans resourceId
+  const orphanSlots = await prisma.reservationSlot.findMany({
+    where: {
+      establishmentId,
+      source: "AUTO",
+      resourceId: null,
+    },
+    include: {
+      _count: { select: { reservations: true } },
+    },
+  })
+
+  let cleaned = 0
+  for (const slot of orphanSlots) {
+    if (slot._count.reservations === 0) {
+      // Aucune réservation → suppression safe
+      await prisma.reservationSlot.delete({ where: { id: slot.id } })
+      cleaned++
+    } else {
+      // Réservations liées → désactiver seulement (ne pas supprimer)
+      if (slot.isActive) {
+        await prisma.reservationSlot.update({
+          where: { id: slot.id },
+          data: { isActive: false },
+        })
+        cleaned++
+      }
+    }
+  }
+
+  return cleaned
 }
 
 /**

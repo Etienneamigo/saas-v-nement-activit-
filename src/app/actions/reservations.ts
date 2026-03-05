@@ -289,12 +289,12 @@ export async function createReservation(data: unknown) {
     return { error: "Les réservations ne sont pas disponibles pour cet établissement" }
   }
 
-  // Load resource if specified, to compute effective rules
-  let resource: { useCustomRules: boolean; minPartySizeOverride: number | null; maxPartySizeOverride: number | null; slotDurationMinutesOverride: number | null; bookingWindowDaysOverride: number | null } | null = null
+  // Load resource if specified, to compute effective rules (capacity = source of truth for maxPartySize)
+  let resource: { capacity: number; useCustomRules: boolean; minPartySizeOverride: number | null; maxPartySizeOverride: number | null; slotDurationMinutesOverride: number | null; bookingWindowDaysOverride: number | null } | null = null
   if (resourceId) {
     resource = await prisma.reservationResource.findUnique({
       where: { id: resourceId },
-      select: { useCustomRules: true, minPartySizeOverride: true, maxPartySizeOverride: true, slotDurationMinutesOverride: true, bookingWindowDaysOverride: true },
+      select: { capacity: true, useCustomRules: true, minPartySizeOverride: true, maxPartySizeOverride: true, slotDurationMinutesOverride: true, bookingWindowDaysOverride: true },
     })
   }
   const effectiveRules = getEffectiveRules(resource, settings)

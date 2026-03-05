@@ -121,12 +121,24 @@ export async function getSlots(dateFrom?: string, dateTo?: string) {
   try {
     const establishmentId = await requireEstablishment()
 
+    // Check if establishment has active resources → filter out orphan slots
+    const activeResourceCount = await prisma.reservationResource.count({
+      where: { establishmentId, isActive: true },
+    })
+
     const where: Record<string, unknown> = { establishmentId }
     if (dateFrom || dateTo) {
       where.startAt = {
         ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
         ...(dateTo ? { lte: new Date(dateTo) } : {}),
       }
+    }
+    // Si des ressources existent, masquer les slots orphelins (AUTO + resourceId=null)
+    if (activeResourceCount > 0) {
+      where.OR = [
+        { resourceId: { not: null } },  // slots avec ressource (OK)
+        { source: "MANUAL" },            // slots manuels sans ressource (owner les a créés volontairement)
+      ]
     }
 
     const slots = await prisma.reservationSlot.findMany({

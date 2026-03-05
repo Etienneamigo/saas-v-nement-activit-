@@ -161,11 +161,12 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
 
   async function handleSaveDefaults() {
     setSavingDefaults(true)
+    const capacityValue = safeParseInt(defCapacity) ?? defaultRules.capacityPerSlot
     const rules = {
       slotDurationMinutes: safeParseInt(defSlotDuration) ?? defaultRules.slotDurationMinutes,
-      capacityPerSlot: safeParseInt(defCapacity) ?? defaultRules.capacityPerSlot,
+      capacityPerSlot: capacityValue,
       minPartySize: safeParseInt(defMinParty) ?? defaultRules.minPartySize,
-      maxPartySize: safeParseInt(defMaxParty) ?? defaultRules.maxPartySize,
+      maxPartySize: capacityValue, // Sync: maxPartySize = capacityPerSlot
       bookingWindowDays: safeParseInt(defBookingWindow) ?? defaultRules.bookingWindowDays,
     }
     onDefaultRulesChange?.(rules)
@@ -284,7 +285,7 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs">Capacité par créneau</Label>
+              <Label className="text-xs">Capacité par créneau (= taille max groupe)</Label>
               <Input type="number" min="1" value={defCapacity} onChange={(e) => setDefCapacity(e.target.value)} className="h-8 text-sm" />
             </div>
             <div className="space-y-2">
@@ -292,8 +293,8 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
               <Input type="number" min="1" value={defMinParty} onChange={(e) => setDefMinParty(e.target.value)} className="h-8 text-sm" />
             </div>
             <div className="space-y-2">
-              <Label className="text-xs">Taille max du groupe</Label>
-              <Input type="number" min="1" value={defMaxParty} onChange={(e) => setDefMaxParty(e.target.value)} className="h-8 text-sm" />
+              <Label className="text-xs text-gray-400">Taille max du groupe</Label>
+              <p className="text-sm text-gray-400 h-8 flex items-center">{defCapacity} (= capacité)</p>
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Fenêtre de réservation (jours)</Label>
@@ -469,14 +470,8 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Taille max groupe</Label>
-                  <Input
-                    type="number" min="1"
-                    value={formMaxParty}
-                    onChange={(e) => setFormMaxParty(e.target.value)}
-                    placeholder={`Par défaut (${defMaxParty})`}
-                    className="h-8 text-sm"
-                  />
+                  <Label className="text-xs text-gray-400">Taille max groupe</Label>
+                  <p className="text-sm text-gray-400 h-8 flex items-center">{formCapacity} (= capacité)</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Fenêtre résa (jours)</Label>
@@ -501,7 +496,7 @@ export function ResourcesTab({ initialResources, defaultRules, onDefaultRulesCha
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-gray-400">Taille max groupe</Label>
-                  <p className="text-sm text-gray-400">{defMaxParty}</p>
+                  <p className="text-sm text-gray-400">{formCapacity} (= capacité)</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-gray-400">Fenêtre résa</Label>
