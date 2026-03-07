@@ -94,6 +94,33 @@ export const createActivityTypeConfigSchema = z.object({
 
 export const updateActivityTypeConfigSchema = createActivityTypeConfigSchema.partial()
 
+// Date range validation for API query params
+export function validateDateRange(
+  dateFrom: string | undefined | null,
+  dateTo: string | undefined | null
+): { error: string } | { from?: Date; to?: Date } {
+  let from: Date | undefined
+  let to: Date | undefined
+
+  if (dateFrom) {
+    from = new Date(dateFrom)
+    if (isNaN(from.getTime())) {
+      return { error: "dateFrom invalide — format ISO 8601 ou YYYY-MM-DD attendu" }
+    }
+  }
+  if (dateTo) {
+    to = new Date(dateTo)
+    if (isNaN(to.getTime())) {
+      return { error: "dateTo invalide — format ISO 8601 ou YYYY-MM-DD attendu" }
+    }
+  }
+  if (from && to && from > to) {
+    return { error: "dateFrom doit être antérieure ou égale à dateTo" }
+  }
+
+  return { from, to }
+}
+
 // Types
 export type LoginInput = z.infer<typeof loginSchema>
 export type RegisterUserInput = z.infer<typeof registerUserSchema>

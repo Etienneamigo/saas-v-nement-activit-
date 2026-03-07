@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { requireOwner, isErrorResponse } from "../../../_helpers/auth"
 import { enforceApiRateLimit } from "../../../../_helpers/rl"
+import { validateDateRange } from "@/lib/validations"
 
 export async function GET(
   request: NextRequest,
@@ -26,9 +27,13 @@ export async function GET(
   }
 
   if (dateFrom || dateTo) {
+    const dateResult = validateDateRange(dateFrom, dateTo)
+    if ("error" in dateResult) {
+      return NextResponse.json({ error: dateResult.error }, { status: 400 })
+    }
     where.startAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      ...(dateResult.from ? { gte: dateResult.from } : {}),
+      ...(dateResult.to ? { lte: dateResult.to } : {}),
     }
   }
 

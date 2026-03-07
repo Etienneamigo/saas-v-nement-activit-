@@ -4,6 +4,7 @@ import { requireOwner, isErrorResponse } from "../../../_helpers/auth"
 import { enforceApiRateLimit } from "../../../../_helpers/rl"
 import { generateAndPersistSlots } from "@/lib/availability"
 import { z } from "zod"
+import { validateDateRange } from "@/lib/validations"
 
 const createSchema = z.object({
   startAt: z.string().datetime(),
@@ -41,9 +42,13 @@ export async function GET(
 
   const where: Record<string, unknown> = { establishmentId }
   if (dateFrom || dateTo) {
+    const dateResult = validateDateRange(dateFrom, dateTo)
+    if ("error" in dateResult) {
+      return NextResponse.json({ error: dateResult.error }, { status: 400 })
+    }
     where.startAt = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      ...(dateResult.from ? { gte: dateResult.from } : {}),
+      ...(dateResult.to ? { lte: dateResult.to } : {}),
     }
   }
   // Si des ressources existent, masquer les slots orphelins (AUTO + resourceId=null)

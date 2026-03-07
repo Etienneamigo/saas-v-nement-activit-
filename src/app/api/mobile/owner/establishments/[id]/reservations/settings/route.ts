@@ -98,6 +98,7 @@ export async function PUT(
 
   const { weeklySchedule, customFieldDefs, ...settingsData } = parsed.data
 
+  try {
   await prisma.$transaction(async (tx) => {
     const settings = await tx.reservationSettings.upsert({
       where: { establishmentId },
@@ -136,12 +137,28 @@ export async function PUT(
         order: field.order,
       }
       if (field.id) {
-        await tx.reservationCustomFieldDef.update({ where: { id: field.id }, data: fieldData })
+        // SECURITY: enforce ownership — only update if field belongs to THIS settings
+        const updated = await tx.reservationCustomFieldDef.updateMany({
+          where: { id: field.id, settingsId: settings.id },
+          data: fieldData,
+        })
+        if (updated.count === 0) {
+          throw new Error(`IDOR_BLOCKED:${field.id}`)
+        }
       } else {
         await tx.reservationCustomFieldDef.create({ data: fieldData })
       }
     }
   })
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith("IDOR_BLOCKED:")) {
+      return NextResponse.json(
+        { error: "Custom field not found or access denied" },
+        { status: 403 }
+      )
+    }
+    throw err
+  }
 
   // Return fresh settings
   const updated = await prisma.reservationSettings.findUnique({
