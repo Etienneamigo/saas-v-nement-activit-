@@ -71,9 +71,24 @@ model User {
   updatedAt              DateTime  @updatedAt
 
   // Relations
-  establishment Establishment?
-  favorites     Favorite[]
-  reservations  Reservation[]
+  establishment       Establishment?
+  favorites           Favorite[]
+  reservations        Reservation[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+// Token de réinitialisation de mot de passe
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Modèle Établissement

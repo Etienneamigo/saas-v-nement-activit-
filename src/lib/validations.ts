@@ -25,6 +25,24 @@ export const registerEstablishmentSchema = z.object({
   promoCode: z.string().optional(), // Code promo optionnel à l'inscription
 })
 
+// Password reset schemas
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Email invalide"),
+})
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email("Email invalide"),
+  token: z.string().min(1, "Token requis"),
+  newPassword: z
+    .string()
+    .min(8, "Le mot de passe doit contenir au moins 8 caractères")
+    .regex(/[a-zA-Z]/, "Le mot de passe doit contenir au moins une lettre")
+    .regex(/[0-9]/, "Le mot de passe doit contenir au moins un chiffre"),
+})
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+
 // Activity schemas - type is now a free-form string (validated against DB)
 export const activityTypeSchema = z.string().min(1, "Le type d'activité est requis")
 
